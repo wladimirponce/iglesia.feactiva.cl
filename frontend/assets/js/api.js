@@ -1,5 +1,5 @@
 (function () {
-    const API_BASE = window.FEACTIVA_API_BASE || 'https://api.iglesia.feactiva.cl/api/v1';
+    const API_BASE = window.FEACTIVA_API_BASE || 'https://iglesia.feactiva.cl/api/v1';
 
     function token() {
         return localStorage.getItem('feactiva_dev_token');
