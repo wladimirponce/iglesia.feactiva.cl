@@ -41,18 +41,21 @@ INSERT INTO auth_users (
     name,
     email,
     password_hash,
+    phone,
     is_active,
     email_verified_at
 ) VALUES (
     'Admin Demo',
     'admin@demo.test',
     '$2y$10$.hkZ69sxpqs77Xx4S1SIgeOV/c12Kk6r/eK9vRhsfoTsw3I9/VUR6',
+    '+56900000000',
     1,
     UTC_TIMESTAMP()
 )
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     password_hash = VALUES(password_hash),
+    phone = VALUES(phone),
     is_active = VALUES(is_active),
     email_verified_at = VALUES(email_verified_at),
     deleted_at = NULL;

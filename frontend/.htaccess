@@ -5,15 +5,11 @@
 
     RewriteEngine On
 
-    # Manejar Authorization Header (Importante para JWT en cPanel)
-    RewriteCond %{HTTP:Authorization} .
-    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-
     # Endpoint interno server-to-server: ejecutar archivo directo.
     RewriteRule ^internal/whatsapp/identify\.php$ - [L]
 
-    # Redirigir todo a index.php si el archivo/carpeta no existe
+    # Frontend estatico: servir archivos existentes y dejar fallback a index.html.
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^ index.php [L]
+    RewriteRule ^ index.html [L]
 </IfModule>

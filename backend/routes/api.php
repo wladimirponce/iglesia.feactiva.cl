@@ -51,6 +51,24 @@ $router->get('/api/v1/test-permission', static function (): void {
     'permission' => 'auth.usuarios.ver',
 ]);
 
+$whatsAppIdentityController = new WhatsAppIdentityController();
+
+$router->post('/api/v1/integrations/whatsapp/identify', [$whatsAppIdentityController, 'identify'], [
+    IntegrationAuthMiddleware::class,
+]);
+
+$agentController = new AgentController();
+
+$router->post('/api/v1/agent/requests', [$agentController, 'store'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+]);
+
+$router->get('/api/v1/agent/requests/{id}', [$agentController, 'show'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+]);
+
 $crmPersonasController = new CrmPersonasController();
 
 $router->get('/api/v1/crm/personas', [$crmPersonasController, 'index'], [

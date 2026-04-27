@@ -142,3 +142,51 @@ Password: feactiva
 - No se conecta a ninguna base actual de FeActiva.
 - No se guardan credenciales reales de produccion.
 - Las credenciales deben venir de variables de entorno.
+
+## Integracion WhatsApp server-to-server
+
+El webhook externo de FeActiva vive en:
+
+```text
+https://feactiva.cl/whatsapp/webhook.php
+```
+
+Para identificar usuarios por telefono, el webhook debe llamar preferentemente al endpoint interno directo:
+
+```text
+https://iglesia.feactiva.cl/internal/whatsapp/identify.php
+```
+
+Variables requeridas:
+
+```env
+WHATSAPP_INTEGRATION_KEY=
+WHATSAPP_INTERNAL_IDENTIFY_URL=https://iglesia.feactiva.cl/internal/whatsapp/identify.php
+```
+
+La llamada debe ser `POST` JSON e incluir:
+
+```http
+X-Integration-Key: <clave interna compartida>
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "phone": "+569XXXXXXXX"
+}
+```
+
+Si el dominio usa Cloudflare/WAF/anti-bot, crear una regla Skip/Allow para:
+
+```text
+/internal/whatsapp/identify.php
+```
+
+Recomendado:
+
+- Permitir solo metodo `POST`.
+- Limitar por IP origen del servidor `feactiva.cl` si el hosting lo permite.
+- No aplicar challenge/bot fight mode a esta ruta, porque es una llamada server-to-server y debe responder JSON.
