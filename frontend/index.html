@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FeActiva Iglesia SaaS</title>
+    <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+    <main id="auth-loading-screen" class="login-shell">
+        <section class="login-panel auth-loading-panel">
+            <div class="brand-mark">FA</div>
+            <p class="eyebrow">FeActiva Iglesia SaaS</p>
+            <h1>Validando sesion...</h1>
+        </section>
+    </main>
+
+    <main id="login-screen" class="login-shell" hidden>
+        <section class="login-panel">
+            <div class="brand-mark">FA</div>
+            <p class="eyebrow">FeActiva Iglesia SaaS</p>
+            <h1>Administracion</h1>
+            <form id="login-form" class="form-stack">
+                <label>
+                    Email
+                    <input id="login-email" type="email" autocomplete="email" value="admin@demo.test" required>
+                </label>
+                <label>
+                    Password
+                    <input id="login-password" type="password" autocomplete="current-password" value="Demo123456!" required>
+                </label>
+                <button type="submit" class="primary-button">Ingresar</button>
+                <p id="login-error" class="form-message error" hidden></p>
+            </form>
+        </section>
+    </main>
+
+    <main id="app-screen" class="app-shell" hidden>
+        <input id="menu-toggle" class="menu-toggle" type="checkbox" aria-label="Abrir menu">
+        <header class="mobile-appbar">
+            <label for="menu-toggle" class="menu-button" aria-label="Abrir menu">☰</label>
+            <div class="mobile-brand">
+                <div class="brand-mark tiny">FA</div>
+                <span>FeActiva</span>
+            </div>
+        </header>
+        <aside class="sidebar">
+            <label for="menu-toggle" class="drawer-close" aria-label="Cerrar menu">Cerrar</label>
+            <div class="sidebar-brand">
+                <div class="brand-mark small">FA</div>
+                <div>
+                    <strong>FeActiva</strong>
+                    <span>Iglesia SaaS</span>
+                </div>
+            </div>
+            <nav class="side-nav" aria-label="Secciones">
+                <button type="button" data-view="dashboard" class="active">Dashboard</button>
+                <button type="button" data-view="crm">CRM Personas</button>
+                <button type="button" data-view="familias">Familias</button>
+                <button type="button" data-view="finanzas">Finanzas</button>
+                <button type="button" data-view="contabilidad">Contabilidad</button>
+                <button type="button" data-view="discipulado">Discipulado</button>
+                <button type="button" data-view="pastoral">Pastoral</button>
+            </nav>
+            <button id="logout-button" type="button" class="ghost-button">Cerrar sesion</button>
+        </aside>
+        <label for="menu-toggle" class="drawer-backdrop" aria-label="Cerrar menu"></label>
+
+        <section class="workspace">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Panel administrativo</p>
+                    <h2 id="view-title">Dashboard</h2>
+                </div>
+                <div id="user-badge" class="user-badge">-</div>
+            </header>
+
+            <section id="global-error" class="alert error" hidden></section>
+
+            <section id="view-dashboard" class="view active">
+                <div class="metric-grid">
+                    <article class="metric-card">
+                        <span>Estado API</span>
+                        <strong id="health-status">-</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Usuario</span>
+                        <strong id="dashboard-user">-</strong>
+                    </article>
+                    <article class="metric-card">
+                        <span>Tenant</span>
+                        <strong id="dashboard-tenant">-</strong>
+                    </article>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Resumen financiero</h3>
+                    </div>
+                    <div id="dashboard-finance-summary" class="summary-strip"></div>
+                </div>
+            </section>
+
+            <section id="view-crm" class="view">
+                <div class="content-grid">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h3>Nueva persona</h3>
+                        </div>
+                        <form id="persona-form" class="form-grid">
+                            <label>Nombres<input name="nombres" required></label>
+                            <label>Apellidos<input name="apellidos" required></label>
+                            <label>Email<input name="email" type="email"></label>
+                            <label>Telefono<input name="telefono"></label>
+                            <label>Estado
+                                <select name="estado_persona">
+                                    <option value="visita">Visita</option>
+                                    <option value="nuevo_asistente">Nuevo asistente</option>
+                                    <option value="miembro">Miembro</option>
+                                    <option value="lider">Lider</option>
+                                    <option value="servidor">Servidor</option>
+                                </select>
+                            </label>
+                            <label>Fecha ingreso<input name="fecha_ingreso" type="date"></label>
+                            <button type="submit" class="primary-button span-2">Crear persona</button>
+                            <p id="persona-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+
+                    <article class="panel wide">
+                        <div class="panel-header">
+                            <h3>Personas</h3>
+                            <button id="reload-personas" type="button" class="secondary-button">Actualizar</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Email</th>
+                                        <th>Telefono</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="personas-table"></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="view-finanzas" class="view">
+                <div class="finance-layout">
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h3>Nuevo movimiento</h3>
+                        </div>
+                        <form id="movimiento-form" class="form-grid">
+                            <label>Tipo
+                                <select name="tipo" id="movimiento-tipo" required>
+                                    <option value="ingreso">Ingreso</option>
+                                    <option value="egreso">Egreso</option>
+                                </select>
+                            </label>
+                            <label>Cuenta<select name="cuenta_id" id="movimiento-cuenta" required></select></label>
+                            <label>Categoria<select name="categoria_id" id="movimiento-categoria" required></select></label>
+                            <label>Centro costo<select name="centro_costo_id" id="movimiento-centro"></select></label>
+                            <label>Descripcion<input name="descripcion" required></label>
+                            <label>Monto<input name="monto" type="number" min="1" step="0.01" required></label>
+                            <label>Fecha movimiento<input name="fecha_movimiento" type="date" required></label>
+                            <label>Fecha contable<input name="fecha_contable" type="date" required></label>
+                            <label>Medio pago
+                                <select name="medio_pago">
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="tarjeta_debito">Tarjeta debito</option>
+                                    <option value="tarjeta_credito">Tarjeta credito</option>
+                                    <option value="cheque">Cheque</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </label>
+                            <button type="submit" class="primary-button span-2">Crear movimiento</button>
+                            <p id="movimiento-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+
+                    <div class="finance-main">
+                        <article class="panel">
+                            <div class="panel-header">
+                                <h3>Resumen</h3>
+                                <div class="inline-filters">
+                                    <input id="resumen-inicio" type="date">
+                                    <input id="resumen-fin" type="date">
+                                    <button id="reload-resumen" type="button" class="secondary-button">Ver</button>
+                                </div>
+                            </div>
+                            <div id="finance-summary" class="summary-strip"></div>
+                        </article>
+
+                        <article class="panel">
+                            <div class="panel-header">
+                                <h3>Saldo por cuentas</h3>
+                            </div>
+                            <div id="saldo-cuentas" class="account-list"></div>
+                        </article>
+
+                        <article class="panel">
+                            <div class="panel-header">
+                                <h3>Movimientos</h3>
+                                <button id="reload-movimientos" type="button" class="secondary-button">Actualizar</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Tipo</th>
+                                            <th>Descripcion</th>
+                                            <th>Cuenta</th>
+                                            <th>Monto</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="movimientos-table"></tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-familias" class="view">
+                <div class="content-grid">
+                    <article class="panel">
+                        <div class="panel-header"><h3>Nueva familia</h3></div>
+                        <form id="familia-form" class="form-grid">
+                            <label>Nombre familia<input name="nombre_familia" required></label>
+                            <label>Telefono<input name="telefono_principal"></label>
+                            <label>Ciudad<input name="ciudad"></label>
+                            <label>Direccion<input name="direccion"></label>
+                            <label class="span-2">Observaciones<textarea name="observaciones"></textarea></label>
+                            <button type="submit" class="primary-button span-2">Crear familia</button>
+                            <p id="familia-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header">
+                            <h3>Agregar persona</h3>
+                            <button id="reload-familias" type="button" class="secondary-button">Actualizar</button>
+                        </div>
+                        <form id="familia-persona-form" class="form-grid">
+                            <label>Familia<select id="familia-persona-familia" name="familia_id" required></select></label>
+                            <label>Persona<select id="familia-persona-persona" name="persona_id" required></select></label>
+                            <label>Relacion
+                                <select name="tipo_relacion">
+                                    <option value="padre">Padre</option>
+                                    <option value="madre">Madre</option>
+                                    <option value="hijo">Hijo</option>
+                                    <option value="hija">Hija</option>
+                                    <option value="tutor">Tutor</option>
+                                    <option value="otro">Otro</option>
+                                </select>
+                            </label>
+                            <button type="submit" class="primary-button span-2">Agregar persona</button>
+                            <p id="familia-persona-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Familias</h3></div>
+                        <div id="familias-list" class="stack-list"></div>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Miembros</h3></div>
+                        <div id="familia-miembros" class="stack-list"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="view-contabilidad" class="view">
+                <div class="module-grid">
+                    <article class="panel">
+                        <div class="panel-header"><h3>Crear periodo</h3></div>
+                        <form id="periodo-form" class="form-grid">
+                            <label>Nombre<input name="nombre" required></label>
+                            <label>Inicio<input name="fecha_inicio" type="date" required></label>
+                            <label>Fin<input name="fecha_fin" type="date" required></label>
+                            <button type="submit" class="primary-button span-2">Crear periodo</button>
+                            <p id="periodo-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header"><h3>Asiento balanceado</h3></div>
+                        <form id="asiento-form" class="form-grid">
+                            <label>Numero<input name="numero" required></label>
+                            <label>Fecha<input name="fecha_asiento" type="date" required></label>
+                            <label class="span-2">Descripcion<input name="descripcion" required></label>
+                            <label>Cuenta debe<select id="asiento-cuenta-debe" name="cuenta_debe_id" required></select></label>
+                            <label>Cuenta haber<select id="asiento-cuenta-haber" name="cuenta_haber_id" required></select></label>
+                            <label>Monto<input name="monto" type="number" min="1" step="0.01" required></label>
+                            <button type="submit" class="primary-button span-2">Crear asiento</button>
+                            <p id="asiento-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header">
+                            <h3>Cuentas contables</h3>
+                            <button id="reload-contabilidad" type="button" class="secondary-button">Actualizar</button>
+                        </div>
+                        <div class="table-wrap"><table><thead><tr><th>Codigo</th><th>Nombre</th><th>Tipo</th><th>Naturaleza</th></tr></thead><tbody id="acct-cuentas-table"></tbody></table></div>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Asientos</h3></div>
+                        <div class="table-wrap"><table><thead><tr><th>Numero</th><th>Fecha</th><th>Descripcion</th><th>Estado</th><th>Accion</th></tr></thead><tbody id="acct-asientos-table"></tbody></table></div>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Reportes</h3></div>
+                        <div class="report-actions">
+                            <button type="button" class="secondary-button" data-acct-report="libro-diario">Libro diario</button>
+                            <button type="button" class="secondary-button" data-acct-report="balance-comprobacion">Balance comprobacion</button>
+                            <button type="button" class="secondary-button" data-acct-report="estado-resultados">Estado resultados</button>
+                        </div>
+                        <div id="acct-report-output" class="stack-list"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="view-discipulado" class="view">
+                <div class="module-grid">
+                    <article class="panel">
+                        <div class="panel-header"><h3>Nueva ruta</h3></div>
+                        <form id="disc-ruta-form" class="form-grid">
+                            <label>Nombre<input name="nombre" required></label>
+                            <label>Duracion dias<input name="duracion_estimada_dias" type="number" min="1"></label>
+                            <label class="span-2">Descripcion<textarea name="descripcion"></textarea></label>
+                            <button type="submit" class="primary-button span-2">Crear ruta</button>
+                            <p id="disc-ruta-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header"><h3>Etapa</h3></div>
+                        <form id="disc-etapa-form" class="form-grid">
+                            <label>Ruta<select id="disc-etapa-ruta" name="ruta_id" required></select></label>
+                            <label>Orden<input name="orden" type="number" min="0" value="0"></label>
+                            <label class="span-2">Nombre<input name="nombre" required></label>
+                            <button type="submit" class="primary-button span-2">Crear etapa</button>
+                            <p id="disc-etapa-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header"><h3>Asignar persona</h3></div>
+                        <form id="disc-asignar-form" class="form-grid">
+                            <label>Persona<select id="disc-persona" name="persona_id" required></select></label>
+                            <label>Ruta<select id="disc-ruta-asignar" name="ruta_id" required></select></label>
+                            <button type="submit" class="primary-button span-2">Asignar ruta</button>
+                            <p id="disc-asignar-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header"><h3>Avance</h3></div>
+                        <form id="disc-avance-form" class="form-grid">
+                            <label>Persona<select id="disc-avance-persona" name="persona_id" required></select></label>
+                            <button type="submit" class="secondary-button">Ver avance</button>
+                        </form>
+                        <div id="disc-avance-list" class="stack-list"></div>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header">
+                            <h3>Rutas</h3>
+                            <button id="reload-discipulado" type="button" class="secondary-button">Actualizar</button>
+                        </div>
+                        <div id="disc-rutas-list" class="stack-list"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section id="view-pastoral" class="view">
+                <div class="module-grid">
+                    <article class="panel">
+                        <div class="panel-header"><h3>Nuevo caso</h3></div>
+                        <form id="past-caso-form" class="form-grid">
+                            <label>Persona<select id="past-caso-persona" name="persona_id" required></select></label>
+                            <label>Tipo<select name="tipo"><option value="consejeria">Consejeria</option><option value="oracion">Oracion</option><option value="visita">Visita</option><option value="crisis">Crisis</option><option value="acompanamiento">Acompanamiento</option><option value="otro">Otro</option></select></label>
+                            <label class="span-2">Titulo<input name="titulo" required></label>
+                            <label>Prioridad<select name="prioridad"><option value="media">Media</option><option value="baja">Baja</option><option value="alta">Alta</option><option value="critica">Critica</option></select></label>
+                            <label>Fecha apertura<input name="fecha_apertura" type="date" required></label>
+                            <label class="span-2">Resumen<textarea name="descripcion_general"></textarea></label>
+                            <button type="submit" class="primary-button span-2">Crear caso</button>
+                            <p id="past-caso-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel">
+                        <div class="panel-header"><h3>Solicitud de oracion</h3></div>
+                        <form id="past-oracion-form" class="form-grid">
+                            <label>Persona<select id="past-oracion-persona" name="persona_id"></select></label>
+                            <label>Categoria<input name="categoria"></label>
+                            <label class="span-2">Titulo<input name="titulo" required></label>
+                            <label class="span-2">Detalle<textarea name="detalle"></textarea></label>
+                            <button type="submit" class="primary-button span-2">Crear solicitud</button>
+                            <p id="past-oracion-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header">
+                            <h3>Casos pastorales</h3>
+                            <button id="reload-pastoral" type="button" class="secondary-button">Actualizar</button>
+                        </div>
+                        <div id="past-casos-list" class="stack-list"></div>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Detalle y sesiones</h3></div>
+                        <div id="past-caso-detalle" class="stack-list"></div>
+                        <form id="past-sesion-form" class="form-grid" hidden>
+                            <input type="hidden" name="caso_id" id="past-sesion-caso-id">
+                            <label>Fecha sesion<input name="fecha_sesion" type="datetime-local" required></label>
+                            <label>Modalidad<select name="modalidad"><option value="presencial">Presencial</option><option value="online">Online</option><option value="telefono">Telefono</option><option value="whatsapp">WhatsApp</option><option value="otro">Otro</option></select></label>
+                            <label class="span-2">Resumen<textarea name="resumen"></textarea></label>
+                            <button type="submit" class="primary-button span-2">Crear sesion</button>
+                            <p id="past-sesion-message" class="form-message span-2" hidden></p>
+                        </form>
+                        <form id="past-derivar-form" class="form-grid" hidden>
+                            <input type="hidden" name="caso_id" id="past-derivar-caso-id">
+                            <label>Tipo derivacion<select name="tipo_derivacion"><option value="pastor">Pastor</option><option value="psicologo">Psicologo</option><option value="orientador">Orientador</option><option value="diacono">Diacono</option><option value="lider">Lider</option><option value="externo">Externo</option><option value="otro">Otro</option></select></label>
+                            <label>Derivado a nombre<input name="derivado_a_nombre"></label>
+                            <label class="span-2">Motivo<textarea name="motivo" required></textarea></label>
+                            <button type="submit" class="secondary-button span-2">Derivar caso</button>
+                            <p id="past-derivar-message" class="form-message span-2" hidden></p>
+                        </form>
+                    </article>
+                    <article class="panel wide">
+                        <div class="panel-header"><h3>Solicitudes de oracion</h3></div>
+                        <div id="past-oracion-list" class="stack-list"></div>
+                    </article>
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/dashboard.js"></script>
+    <script src="assets/js/crm.js"></script>
+    <script src="assets/js/finanzas.js"></script>
+    <script src="assets/js/familias.js"></script>
+    <script src="assets/js/contabilidad.js"></script>
+    <script src="assets/js/discipulado.js"></script>
+    <script src="assets/js/pastoral.js"></script>
+</body>
+</html>

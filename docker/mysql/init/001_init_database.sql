@@ -1,0 +1,14 @@
+SOURCE /schema/migrations/001_core_saas.sql;
+SOURCE /schema/seeds/001_core_seed.sql;
+SOURCE /schema/seeds/002_dev_auth_seed.sql;
+SOURCE /schema/seeds/003_dev_permissions_seed.sql;
+SOURCE /schema/migrations/002_crm_personas.sql;
+SOURCE /schema/migrations/002b_add_tutor_to_parentesco.sql;
+SOURCE /schema/seeds/004_crm_seed.sql;
+SOURCE /schema/seeds/005_dev_crm_permissions_seed.sql;
+SOURCE /schema/migrations/003_finanzas_basicas.sql;
+SOURCE /schema/seeds/006_finanzas_seed.sql;
+SOURCE /schema/seeds/007_dev_finanzas_permissions_seed.sql;
+SOURCE /schema/migrations/004_contabilidad_formal.sql;
+SOURCE /schema/seeds/008_contabilidad_seed.sql;
+SOURCE /schema/seeds/009_dev_contabilidad_permissions_seed.sql;
