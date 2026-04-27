@@ -7,7 +7,7 @@ class AutoMigrator
     public static function checkAndRun(): void
     {
         try {
-            $pdo = Database::getInstance()->getConnection();
+            $pdo = Database::connection();
             
             // 1. Verificar si existe una tabla core (saas_tenants)
             $stmt = $pdo->query("SHOW TABLES LIKE 'saas_tenants'");
