@@ -28,6 +28,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 require_once __DIR__ . '/../core/Response.php';
 require_once __DIR__ . '/../core/AuthContext.php';
 require_once __DIR__ . '/../core/Database.php';
+require_once __DIR__ . '/../core/AutoMigrator.php';
+AutoMigrator::checkAndRun();
 require_once __DIR__ . '/../core/Router.php';
 require_once __DIR__ . '/../modules/auth/AuthValidator.php';
 require_once __DIR__ . '/../modules/auth/AuthRepository.php';
