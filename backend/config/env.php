@@ -39,7 +39,8 @@ function env(string $key, mixed $default = null): mixed
         }
     }
 
-    $value = getenv($key);
+    // Priorizar $_ENV que es lo que llenamos arriba, luego getenv
+    $value = $_ENV[$key] ?? getenv($key);
 
     if ($value === false) {
         return $default;
