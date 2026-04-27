@@ -45,10 +45,15 @@ function env(string $key, mixed $default = null): mixed
         return $default;
     }
 
-    return match (strtolower($value)) {
-        'true' => true,
-        'false' => false,
-        'null' => null,
-        default => $value,
-    };
+    $lowerValue = strtolower($value);
+    switch ($lowerValue) {
+        case 'true':
+            return true;
+        case 'false':
+            return false;
+        case 'null':
+            return null;
+        default:
+            return $value;
+    }
 }
