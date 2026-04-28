@@ -45,6 +45,14 @@ final class AgentResponseComposer
                 return 'Para crear la solicitud de oracion necesito al menos la persona y el detalle de la peticion.';
             }
 
+            if ($reason === 'entity_ambiguous') {
+                return 'Encontre varias coincidencias. Indica el ID exacto que debo usar.';
+            }
+
+            if ($reason === 'entity_not_found') {
+                return 'No encontre una entidad necesaria para ejecutar esa accion. Indica el nombre exacto o el ID.';
+            }
+
             if (in_array($reason, [
                 'missing_finance_data', 'missing_person_data', 'missing_reminder_data',
                 'missing_person_update_data', 'missing_family_data', 'missing_family_assign_data',

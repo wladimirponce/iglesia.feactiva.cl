@@ -21,6 +21,13 @@ require_once __DIR__ . '/../../../modules/agent/ontology/OntologyPermission.php'
 require_once __DIR__ . '/../../../modules/agent/ontology/OntologyResolutionResult.php';
 require_once __DIR__ . '/../../../modules/agent/ontology/OntologyRegistry.php';
 require_once __DIR__ . '/../../../modules/agent/ontology/OntologyResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/EntityResolutionResult.php';
+require_once __DIR__ . '/../../../modules/agent/entities/PersonEntityResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/FinancialAccountEntityResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/FinancialCategoryEntityResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/FamilyEntityResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/DiscipleshipRouteEntityResolver.php';
+require_once __DIR__ . '/../../../modules/agent/entities/EntityResolver.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgentToolInterface.php';
 require_once __DIR__ . '/../../../modules/agent/tools/CrmCreatePersonTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/CrmUpdatePersonTool.php';
@@ -138,7 +145,8 @@ function handleInternalWhatsAppMessage(): void
         new AgentAuditLogger(),
         new AgentToolRegistry(),
         new PermissionRepository(),
-        new OntologyResolver(new OntologyRegistry())
+        new OntologyResolver(new OntologyRegistry()),
+        new EntityResolver()
     );
     $agentResult = $agentService->createRequest($tenantId, $userId, 'whatsapp', $messageText, $conversationId);
     $responseText = (string) ($agentResult['response']['text'] ?? '');

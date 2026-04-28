@@ -11,7 +11,8 @@ final class AgentService
         private readonly AgentAuditLogger $auditLogger,
         private readonly AgentToolRegistry $toolRegistry,
         private readonly PermissionRepository $permissionRepository,
-        private readonly ?OntologyResolver $ontologyResolver = null
+        private readonly ?OntologyResolver $ontologyResolver = null,
+        private readonly ?EntityResolver $entityResolver = null
     ) {
     }
 
@@ -169,6 +170,19 @@ final class AgentService
         }
 
         $input = $this->buildOntologyToolInput($tenantId, $userId, $requestId, $ontology, $inputText);
+        $entityProblem = $this->entityResolutionProblem($tenantId, $userId, $requestId, $input);
+        if ($entityProblem !== null) {
+            return [
+                'tool_name' => $ontology->toolName,
+                'module_code' => null,
+                'status' => 'failed',
+                'input' => $input,
+                'output' => $entityProblem,
+                'action_id' => null,
+            ];
+        }
+        unset($input['_entity_resolution']);
+
         $missing = $this->missingFields($input, $ontology->missingFields);
 
         if ($missing !== []) {
@@ -304,6 +318,12 @@ final class AgentService
         $fields = $ontology->extractedFields;
         $action = (string) $ontology->action;
 
+        if ($this->entityResolver instanceof EntityResolver) {
+            $resolved = $this->entityResolver->resolveToolInput($tenantId, $ontology->toolName, $fields);
+            $fields = $resolved['fields'];
+            $fields['_entity_resolution'] = $resolved['results'];
+        }
+
         if (isset($fields['cuenta_nombre']) && (!isset($fields['cuenta_id']) || $fields['cuenta_id'] === null)) {
             $fields['cuenta_id'] = $this->resolveCuentaId($tenantId, (string) $fields['cuenta_nombre']);
         }
@@ -377,6 +397,49 @@ final class AgentService
         }
 
         return $fields;
+    }
+
+    private function entityResolutionProblem(int $tenantId, int $userId, int $requestId, array $input): ?array
+    {
+        $results = is_array($input['_entity_resolution'] ?? null) ? $input['_entity_resolution'] : [];
+        if ($results === []) {
+            return null;
+        }
+
+        $ambiguous = [];
+        $notFound = [];
+
+        foreach ($results as $field => $result) {
+            if (!$result instanceof EntityResolutionResult) {
+                continue;
+            }
+
+            $this->auditLogger->logEntityResolution($tenantId, $userId, $requestId, (string) $field, $result);
+
+            if ($result->ambiguous) {
+                $ambiguous[(string) $field] = $result->toArray();
+            } elseif (!$result->resolved) {
+                $notFound[(string) $field] = $result->toArray();
+            }
+        }
+
+        if ($ambiguous !== []) {
+            return [
+                'reason' => 'entity_ambiguous',
+                'ambiguous_entities' => $ambiguous,
+                'missing_fields' => array_keys($ambiguous),
+            ];
+        }
+
+        if ($notFound !== []) {
+            return [
+                'reason' => 'entity_not_found',
+                'not_found_entities' => $notFound,
+                'missing_fields' => array_keys($notFound),
+            ];
+        }
+
+        return null;
     }
 
     private function shouldAutoCreatePersonForAction(string $action): bool

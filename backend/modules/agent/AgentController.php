@@ -18,7 +18,8 @@ final class AgentController
             new AgentAuditLogger(),
             new AgentToolRegistry(),
             new PermissionRepository(),
-            new OntologyResolver(new OntologyRegistry())
+            new OntologyResolver(new OntologyRegistry()),
+            new EntityResolver()
         );
     }
 

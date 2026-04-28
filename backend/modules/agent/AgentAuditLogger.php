@@ -69,6 +69,25 @@ final class AgentAuditLogger
         );
     }
 
+    public function logEntityResolution(
+        int $tenantId,
+        int $userId,
+        int $requestId,
+        string $field,
+        EntityResolutionResult $result
+    ): void {
+        $eventType = match ($result->status()) {
+            'resolved' => 'agent.entity.resolved',
+            'ambiguous' => 'agent.entity.ambiguous',
+            default => 'agent.entity.not_found',
+        };
+
+        $this->logEvent($tenantId, $userId, $requestId, $eventType, $eventType, $field, $result->resolved ? 'success' : 'failed', [
+            'field' => $field,
+            'entity' => $result->toArray(),
+        ]);
+    }
+
     private function logEvent(
         int $tenantId,
         int $userId,
