@@ -15,7 +15,7 @@ final class AgentResponseComposer
             'consulta_finanzas' => 'Puedes revisar el resumen financiero en el modulo Finanzas. Pronto podre entregarte el detalle por aqui.',
             'consulta_crm' => 'Puedes revisar la informacion de personas y familias en el modulo CRM. Pronto podre ayudarte a consultarla desde aqui.',
             'oracion' => 'Puedes registrar y revisar solicitudes de oracion en el modulo Pastoral. Pronto podre ayudarte a gestionarlas por aqui.',
-            default => 'Todavia no puedo resolver esa solicitud. Pronto podre ayudarte con mas consultas y gestiones en FeActiva Iglesia.',
+            default => 'Puedo ayudarte con: personas, familias, finanzas, discipulado o pastoral.',
         };
     }
 
@@ -25,8 +25,16 @@ final class AgentResponseComposer
         $toolName = (string) ($toolExecution['tool_name'] ?? '');
         $output = is_array($toolExecution['output'] ?? null) ? $toolExecution['output'] : [];
 
+        if ($status === 'unresolved') {
+            return 'Puedo ayudarte con: personas, familias, finanzas, discipulado o pastoral.';
+        }
+
+        if ($status === 'unhandled') {
+            return 'Esa funcion aun no esta disponible.';
+        }
+
         if ($status === 'blocked') {
-            return 'No tienes permiso para ejecutar esta consulta o accion desde el agente.';
+            return 'No tienes permisos para realizar esta accion.';
         }
 
         if ($status === 'failed') {
@@ -43,7 +51,7 @@ final class AgentResponseComposer
                 'missing_discipulado_data', 'missing_stage_data', 'missing_pastoral_case_data',
                 'missing_ontology_data',
             ], true)) {
-                return 'Me faltan datos para ejecutar esa accion: ' . ($missingFields !== '' ? $missingFields : 'datos obligatorios') . '.';
+                return 'Me faltan datos para ejecutar esa accion. Indica: ' . ($missingFields !== '' ? $missingFields : 'datos obligatorios') . '.';
             }
 
             return 'No pude ejecutar esa herramienta en este momento.';

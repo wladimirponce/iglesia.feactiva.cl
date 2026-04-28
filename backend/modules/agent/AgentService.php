@@ -32,18 +32,23 @@ final class AgentService
                 'user_id' => $userId,
             ]);
             $ontologyData = $ontology instanceof OntologyResolutionResult ? $ontology->toArray() : null;
+            $fallbackIntent = $this->intentRouter->detect($inputText);
             $intent = $ontology instanceof OntologyResolutionResult && $ontology->resolved
                 ? (string) $ontology->action
-                : $this->intentRouter->detect($inputText);
+                : $fallbackIntent;
             $this->repository->updateIntent($tenantId, $requestId, $intent);
 
             if ($ontology instanceof OntologyResolutionResult) {
-                if ($ontology->resolved) {
-                    $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.resolved', (string) $ontology->action, 'success', [
+                if ($ontology->resolved && $ontology->toolName === null) {
+                    $this->auditLogger->logOntology($tenantId, $userId, $requestId, 'agent.ontology.unhandled_action', (string) $ontology->action, 'failed', [
+                        'ontology' => $ontologyData,
+                    ]);
+                } elseif ($ontology->resolved) {
+                    $this->auditLogger->logOntology($tenantId, $userId, $requestId, 'agent.ontology.resolved', (string) $ontology->action, 'success', [
                         'ontology' => $ontologyData,
                     ]);
                 } else {
-                    $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.unresolved', 'unresolved', 'failed', [
+                    $this->auditLogger->logOntology($tenantId, $userId, $requestId, 'agent.ontology.unresolved', 'unresolved', 'failed', [
                         'input_text' => $inputText,
                     ]);
                 }
@@ -54,9 +59,20 @@ final class AgentService
                 'ontology' => $ontologyData,
             ]);
 
-            $toolExecution = $ontology instanceof OntologyResolutionResult && $ontology->resolved
-                ? $this->executeToolForOntology($tenantId, $userId, $requestId, $ontology, $inputText)
-                : $this->executeToolForIntent($tenantId, $userId, $requestId, $intent, $inputText);
+            if ($ontology instanceof OntologyResolutionResult && !$ontology->resolved && $fallbackIntent !== 'saludo') {
+                $toolExecution = [
+                    'tool_name' => null,
+                    'module_code' => null,
+                    'status' => 'unresolved',
+                    'input' => ['input_text' => $inputText],
+                    'output' => ['reason' => 'ontology_unresolved'],
+                    'action_id' => null,
+                ];
+            } elseif ($ontology instanceof OntologyResolutionResult && $ontology->resolved) {
+                $toolExecution = $this->executeToolForOntology($tenantId, $userId, $requestId, $ontology, $inputText);
+            } else {
+                $toolExecution = $this->executeToolForIntent($tenantId, $userId, $requestId, $intent, $inputText);
+            }
             $responseText = $this->responseComposer->compose($intent, $toolExecution);
             $responseId = $this->repository->createResponse($tenantId, $requestId, $intent, $responseText);
             $this->auditLogger->log($tenantId, $userId, $requestId, 'agent.response.generated', [
@@ -142,17 +158,36 @@ final class AgentService
         string $inputText
     ): ?array {
         if ($ontology->toolName === null) {
-            return null;
+            return [
+                'tool_name' => null,
+                'module_code' => null,
+                'status' => 'unhandled',
+                'input' => ['input_text' => $inputText],
+                'output' => ['reason' => 'ontology_unhandled_action'],
+                'action_id' => null,
+            ];
         }
 
         $input = $this->buildOntologyToolInput($tenantId, $userId, $requestId, $ontology, $inputText);
         $missing = $this->missingFields($input, $ontology->missingFields);
 
         if ($missing !== []) {
-            $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.missing_fields', (string) $ontology->action, 'failed', [
+            $this->auditLogger->logOntology($tenantId, $userId, $requestId, 'agent.ontology.missing_fields', (string) $ontology->action, 'failed', [
                 'ontology' => $ontology->toArray(),
                 'missing_fields' => $missing,
             ]);
+
+            return [
+                'tool_name' => $ontology->toolName,
+                'module_code' => null,
+                'status' => 'failed',
+                'input' => $input,
+                'output' => [
+                    'reason' => 'missing_ontology_data',
+                    'missing_fields' => $missing,
+                ],
+                'action_id' => null,
+            ];
         }
 
         return $this->executeToolRoute($tenantId, $userId, $requestId, [
@@ -184,19 +219,8 @@ final class AgentService
                 'reason' => 'missing_permission',
                 'required_permission' => $tool->requiredPermission(),
             ];
-            $actionId = $this->repository->createAction(
-                $tenantId,
-                $requestId,
-                $userId,
-                $tool->name(),
-                $tool->moduleCode(),
-                $input,
-                $output,
-                'blocked'
-            );
-            $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.tool.blocked', $tool->name(), 'denied', [
-                'action_id' => $actionId,
-                'required_permission' => $tool->requiredPermission(),
+            $this->auditLogger->logPermissionDenied($tenantId, $userId, $requestId, $tool->name(), $tool->requiredPermission(), [
+                'module_code' => $tool->moduleCode(),
             ]);
 
             return [
@@ -205,7 +229,7 @@ final class AgentService
                 'status' => 'blocked',
                 'input' => $input,
                 'output' => $output,
-                'action_id' => $actionId,
+                'action_id' => null,
             ];
         }
 
@@ -214,19 +238,9 @@ final class AgentService
                 'reason' => (string) ($route['missing_reason'] ?? 'missing_required_data'),
                 'missing_fields' => $route['missing_fields'] ?? [],
             ];
-            $actionId = $this->repository->createAction(
-                $tenantId,
-                $requestId,
-                $userId,
-                $tool->name(),
-                $tool->moduleCode(),
-                $input,
-                $output,
-                'failed'
-            );
-            $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.tool.failed', $tool->name(), 'failed', [
-                'action_id' => $actionId,
+            $this->auditLogger->logOntology($tenantId, $userId, $requestId, 'agent.ontology.missing_fields', $tool->name(), 'failed', [
                 'reason' => $output['reason'],
+                'missing_fields' => $output['missing_fields'],
             ]);
 
             return [
@@ -235,7 +249,7 @@ final class AgentService
                 'status' => 'failed',
                 'input' => $input,
                 'output' => $output,
-                'action_id' => $actionId,
+                'action_id' => null,
             ];
         }
 

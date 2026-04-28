@@ -21,6 +21,31 @@ final class AgentAuditLogger
         $this->logEvent($tenantId, $userId, $requestId, $eventType, $eventType, $action, $result, $metadata);
     }
 
+    public function logOntology(
+        int $tenantId,
+        int $userId,
+        int $requestId,
+        string $eventType,
+        string $action,
+        string $result,
+        array $metadata = []
+    ): void {
+        $this->logEvent($tenantId, $userId, $requestId, $eventType, $eventType, $action, $result, $metadata);
+    }
+
+    public function logPermissionDenied(
+        int $tenantId,
+        int $userId,
+        int $requestId,
+        string $action,
+        string $requiredPermission,
+        array $metadata = []
+    ): void {
+        $this->logEvent($tenantId, $userId, $requestId, 'agent.permission.denied', 'agent.permission.denied', $action, 'denied', $metadata + [
+            'required_permission' => $requiredPermission,
+        ]);
+    }
+
     private function logEvent(
         int $tenantId,
         int $userId,

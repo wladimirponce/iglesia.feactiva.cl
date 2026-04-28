@@ -23,6 +23,11 @@ final class OntologyResolutionResult
         return new self(false, null, null, null, null, [], [], false, 'low');
     }
 
+    public static function unhandled(string $action): self
+    {
+        return new self(true, null, $action, null, null, [], [], false, 'low');
+    }
+
     public function hasMissingFields(): bool
     {
         return $this->missingFields !== [];

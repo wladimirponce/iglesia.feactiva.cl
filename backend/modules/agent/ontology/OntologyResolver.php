@@ -22,7 +22,7 @@ final class OntologyResolver
 
         $action = $this->registry->action($actionName);
         if (!$action instanceof OntologyAction) {
-            return OntologyResolutionResult::unresolved();
+            return OntologyResolutionResult::unhandled($actionName);
         }
 
         $fields = $this->extractFields($text, $inputText, $actionName);
@@ -97,6 +97,10 @@ final class OntologyResolver
 
         if (preg_match('/\b(recuerdame|recuérdame|recordatorio|agenda)\b/u', $text) === 1) {
             return 'crear_recordatorio';
+        }
+
+        if (preg_match('/\b(exporta|exportar|descarga|descargar|grafico|gr[aá]fico|reporte avanzado)\b/u', $text) === 1) {
+            return 'accion_no_implementada';
         }
 
         return null;
