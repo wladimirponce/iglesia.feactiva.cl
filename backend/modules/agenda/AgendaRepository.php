@@ -200,6 +200,7 @@ final class AgendaRepository
                 recipient_user_id,
                 recipient_persona_id,
                 recipient_phone,
+                recipient_email,
                 message_text,
                 scheduled_at,
                 status
@@ -211,6 +212,7 @@ final class AgendaRepository
                 :recipient_user_id,
                 :recipient_persona_id,
                 :recipient_phone,
+                :recipient_email,
                 :message_text,
                 :scheduled_at,
                 'scheduled'
@@ -225,6 +227,7 @@ final class AgendaRepository
             'recipient_user_id' => $input['recipient_user_id'] ?? null,
             'recipient_persona_id' => $input['recipient_persona_id'] ?? null,
             'recipient_phone' => $input['recipient_phone'] ?? null,
+            'recipient_email' => $input['recipient_email'] ?? null,
             'message_text' => $input['message_text'],
             'scheduled_at' => $input['scheduled_at'],
         ]);

@@ -57,6 +57,13 @@ final class AgendaService
     public function createNotification(int $tenantId, int $userId, int $agendaItemId, array $input): int
     {
         $this->show($tenantId, $agendaItemId);
+        $recipientType = (string) ($input['recipient_type'] ?? '');
+        if ($recipientType === 'phone' && !$this->validE164((string) ($input['recipient_phone'] ?? ''))) {
+            throw new RuntimeException('AGENDA_INVALID_E164_PHONE');
+        }
+        if ($recipientType === 'email' && !filter_var((string) ($input['recipient_email'] ?? ''), FILTER_VALIDATE_EMAIL)) {
+            throw new RuntimeException('AGENDA_INVALID_EMAIL');
+        }
         $id = $this->repository->createNotification($tenantId, $agendaItemId, $input);
         $this->auditLogger->log($tenantId, $userId, $agendaItemId, 'agenda.notification.scheduled', [], $input + ['id' => $id]);
         return $id;
@@ -70,5 +77,10 @@ final class AgendaService
         if (isset($input['familia_id']) && (int) $input['familia_id'] > 0 && !$this->repository->familiaExists($tenantId, (int) $input['familia_id'])) {
             throw new RuntimeException('AGENDA_FAMILIA_NOT_FOUND');
         }
+    }
+
+    private function validE164(string $phone): bool
+    {
+        return preg_match('/^\+[1-9][0-9]{7,14}$/', trim($phone)) === 1;
     }
 }

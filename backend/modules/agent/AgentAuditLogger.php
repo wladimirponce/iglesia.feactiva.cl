@@ -88,6 +88,17 @@ final class AgentAuditLogger
         ]);
     }
 
+    public function logConversationEvent(
+        int $tenantId,
+        int $userId,
+        string $eventType,
+        string $action,
+        string $result,
+        array $metadata = []
+    ): void {
+        $this->logEvent($tenantId, $userId, null, $eventType, $eventType, $action, $result, $metadata, 'agent_conversation', null);
+    }
+
     private function logEvent(
         int $tenantId,
         int $userId,

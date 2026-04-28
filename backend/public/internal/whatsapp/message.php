@@ -57,6 +57,11 @@ require_once __DIR__ . '/../../../modules/agent/tools/AgendaGetDayScheduleTool.p
 require_once __DIR__ . '/../../../modules/agent/tools/AgendaCompleteItemTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgendaCancelItemTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgentToolRegistry.php';
+require_once __DIR__ . '/../../../modules/agent/conversation/ConversationStateRepository.php';
+require_once __DIR__ . '/../../../modules/agent/conversation/ConversationStateService.php';
+require_once __DIR__ . '/../../../modules/agent/conversation/ConversationStateResolver.php';
+require_once __DIR__ . '/../../../modules/agent/conversation/OutboundDraftRepository.php';
+require_once __DIR__ . '/../../../modules/agent/conversation/OutboundDraftService.php';
 require_once __DIR__ . '/../../../modules/agent/AgentService.php';
 require_once __DIR__ . '/../../../middlewares/IntegrationAuthMiddleware.php';
 
@@ -96,6 +101,9 @@ function handleInternalWhatsAppMessage(): void
     }
 
     $identityService = new WhatsAppIdentityService(new WhatsAppIdentityRepository());
+    $stateService = new ConversationStateService(new ConversationStateRepository(), new AgentAuditLogger());
+    $stateResolver = new ConversationStateResolver();
+    $draftService = new OutboundDraftService(new OutboundDraftRepository(), new AgentAuditLogger());
 
     try {
         $identity = $identityService->identify($phone, 'CL', internalWhatsappIpAddress(), $_SERVER['HTTP_USER_AGENT'] ?? null);
@@ -111,9 +119,17 @@ function handleInternalWhatsAppMessage(): void
     }
 
     if (($identity['found'] ?? false) !== true || ($identity['user'] ?? null) === null) {
+        $normalizedPhone = PhoneNormalizer::normalize($phone, 'CL');
+        $activeState = $stateService->active($normalizedPhone);
+        if ($activeState !== null) {
+            $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
+            Response::success(['found' => false, 'response_text' => $responseText, 'agent_request_id' => null]);
+            return;
+        }
+        $stateService->create(null, null, $normalizedPhone, null, 'onboarding_waiting_confirmation', ['phone' => $normalizedPhone]);
         Response::success([
             'found' => false,
-            'response_text' => 'No encontre tu usuario asociado a este numero. Por favor contacta al administrador de tu iglesia.',
+            'response_text' => 'Hola, veo que eres nuevo por aca. ¿Quieres registrarte?',
             'agent_request_id' => null,
         ]);
         return;
@@ -134,6 +150,34 @@ function handleInternalWhatsAppMessage(): void
     }
 
     $conversationId = internalWhatsappFindOrCreateConversation($tenantId, $userId, $phone, $normalizedPhone);
+    $activeState = $stateService->active($normalizedPhone);
+    if ($activeState !== null) {
+        if ((string) $activeState['state_key'] === 'agenda_waiting_missing_fields') {
+            $state = is_array($activeState['state'] ?? null) ? $activeState['state'] : [];
+            $messageText = trim((string) ($state['pending_text'] ?? '') . ' ' . $messageText);
+            $stateService->close($activeState, 'completed');
+        } else {
+        $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
+        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', ['conversation_state_id' => (int) $activeState['id']]);
+        Response::success(['found' => true, 'response_text' => $responseText, 'agent_request_id' => null]);
+        return;
+        }
+    }
+
+    $draftIntent = $stateResolver->detectOutboundDraft($messageText);
+    if ($draftIntent !== null) {
+        $draftId = $draftService->create($tenantId, $userId, $conversationId, [
+            'original_text' => $messageText,
+            'draft_text' => $draftIntent['message_text'],
+            'channel' => 'whatsapp',
+        ]);
+        $stateService->create($tenantId, $userId, $normalizedPhone, $conversationId, 'whatsapp_draft_waiting_confirmation', ['draft_id' => $draftId]);
+        $responseText = 'Este mensaje enviare: ' . $draftIntent['message_text'] . ' ¿Esta bien asi o prefieres que lo mejore?';
+        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', ['draft_id' => $draftId]);
+        Response::success(['found' => true, 'response_text' => $responseText, 'agent_request_id' => null]);
+        return;
+    }
+
     internalWhatsappCreateMessage(
         $tenantId,
         $conversationId,
@@ -162,6 +206,14 @@ function handleInternalWhatsAppMessage(): void
     $agentResult = $agentService->createRequest($tenantId, $userId, 'whatsapp', $messageText, $conversationId);
     $responseText = (string) ($agentResult['response']['text'] ?? '');
     $agentRequestId = (int) ($agentResult['id'] ?? 0);
+    $tool = is_array($agentResult['tool'] ?? null) ? $agentResult['tool'] : [];
+    $output = is_array($tool['output'] ?? null) ? $tool['output'] : [];
+    if (($tool['status'] ?? '') === 'failed' && is_array($output['missing_fields'] ?? null) && $output['missing_fields'] !== []) {
+        $stateService->create($tenantId, $userId, $normalizedPhone, $conversationId, 'agenda_waiting_missing_fields', [
+            'pending_text' => $messageText,
+            'missing_fields' => $output['missing_fields'],
+        ]);
+    }
 
     internalWhatsappCreateMessage(
         $tenantId,
@@ -299,6 +351,10 @@ function internalWhatsappCreateMessage(
     string $status,
     array $payload
 ): int {
+    $messageType = in_array((string) ($payload['message_type'] ?? 'text'), ['text', 'audio', 'image', 'document'], true)
+        ? (string) ($payload['message_type'] ?? 'text')
+        : 'text';
+    $responseMode = $messageType === 'audio' ? 'audio' : 'text';
     $sql = "
         INSERT INTO wa_messages (
             tenant_id,
@@ -308,6 +364,10 @@ function internalWhatsappCreateMessage(
             message_type,
             provider_message_id,
             body,
+            media_url,
+            transcription_text,
+            transcription_status,
+            response_mode,
             payload,
             status,
             sent_at,
@@ -317,9 +377,13 @@ function internalWhatsappCreateMessage(
             :conversation_id,
             :user_id,
             :direction,
-            'text',
+            :message_type,
             :provider_message_id,
             :body,
+            :media_url,
+            :transcription_text,
+            :transcription_status,
+            :response_mode,
             :payload,
             :status,
             CASE WHEN :direction_sent = 'outbound' THEN UTC_TIMESTAMP() ELSE NULL END,
@@ -333,8 +397,13 @@ function internalWhatsappCreateMessage(
         'conversation_id' => $conversationId,
         'user_id' => $userId,
         'direction' => $direction,
+        'message_type' => $messageType,
         'provider_message_id' => $providerMessageId,
         'body' => $body,
+        'media_url' => $payload['media_url'] ?? null,
+        'transcription_text' => $payload['transcription_text'] ?? null,
+        'transcription_status' => $messageType === 'audio' ? 'pending' : 'not_required',
+        'response_mode' => $responseMode,
         'payload' => internalWhatsappJson($payload),
         'status' => $status,
         'direction_sent' => $direction,
@@ -342,6 +411,111 @@ function internalWhatsappCreateMessage(
     ]);
 
     return (int) Database::connection()->lastInsertId();
+}
+
+function internalWhatsappHandleConversationState(
+    array $activeState,
+    string $messageText,
+    ConversationStateService $stateService,
+    ConversationStateResolver $stateResolver,
+    OutboundDraftService $draftService
+): string {
+    $stateKey = (string) $activeState['state_key'];
+    $state = is_array($activeState['state'] ?? null) ? $activeState['state'] : [];
+
+    if ($stateKey === 'onboarding_waiting_confirmation') {
+        if ($stateResolver->isAffirmative($messageText)) {
+            $stateService->update($activeState, 'onboarding_waiting_name_email', $state);
+            return 'Claro, dame tu nombre completo y correo.';
+        }
+        if ($stateResolver->isNegative($messageText)) {
+            $stateService->close($activeState, 'cancelled');
+            return 'Entendido. Si necesitas registrarte mas adelante, escribeme nuevamente.';
+        }
+        return '¿Quieres registrarte? Responde si o no.';
+    }
+
+    if ($stateKey === 'onboarding_waiting_name_email') {
+        $data = $stateResolver->extractNameEmail($messageText);
+        if ($data === null) {
+            return 'Necesito tu nombre completo y un correo valido.';
+        }
+        $tenantId = (int) env('DEFAULT_TENANT_ID', '1');
+        internalWhatsappCreateBasicUserAndPerson($tenantId, (string) $state['phone'], $data['name'], $data['email']);
+        $stateService->close($activeState, 'completed');
+        return 'Listo, ya quedaste registrado.';
+    }
+
+    if ($stateKey === 'whatsapp_draft_waiting_confirmation') {
+        $draftId = (int) ($state['draft_id'] ?? 0);
+        if ($stateResolver->wantsImprove($messageText)) {
+            $improved = $draftService->improve($draftId);
+            return 'Te propongo: ' . $improved . ' ¿Lo envio?';
+        }
+        if ($stateResolver->isNegative($messageText)) {
+            $draftService->cancel($draftId);
+            $stateService->close($activeState, 'cancelled');
+            return 'Perfecto, cancele el envio.';
+        }
+        if ($stateResolver->isAffirmative($messageText)) {
+            $draftService->approveAndMarkSent($draftId);
+            $stateService->close($activeState, 'completed');
+            return 'Enviado. ¿Necesitas algo mas?';
+        }
+        return '¿Lo envio, lo mejoro o lo cancelo?';
+    }
+
+    return 'Tengo una conversacion pendiente, pero no pude procesarla. Escribe cancelar para cerrarla.';
+}
+
+function internalWhatsappCreateBasicUserAndPerson(int $tenantId, string $phone, string $name, string $email): void
+{
+    $parts = preg_split('/\s+/', trim($name));
+    $firstName = is_array($parts) && isset($parts[0]) ? $parts[0] : $name;
+    $lastName = is_array($parts) && count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : 'Por completar';
+
+    $pdo = Database::connection();
+    $pdo->beginTransaction();
+    try {
+        $statement = $pdo->prepare("
+            INSERT INTO auth_users (name, email, phone, password_hash, is_active)
+            VALUES (:name, :email, :phone, :password_hash, 1)
+            ON DUPLICATE KEY UPDATE phone = VALUES(phone)
+        ");
+        $statement->execute([
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone,
+            'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT),
+        ]);
+        $userId = (int) $pdo->lastInsertId();
+
+        if ($userId > 0) {
+            $statement = $pdo->prepare("
+                INSERT IGNORE INTO auth_user_tenants (user_id, tenant_id, status)
+                VALUES (:user_id, :tenant_id, 'active')
+            ");
+            $statement->execute(['user_id' => $userId, 'tenant_id' => $tenantId]);
+        }
+
+        $statement = $pdo->prepare("
+            INSERT INTO crm_personas (tenant_id, nombres, apellidos, email, whatsapp, estado_persona)
+            VALUES (:tenant_id, :nombres, :apellidos, :email, :whatsapp, 'visita')
+        ");
+        $statement->execute([
+            'tenant_id' => $tenantId,
+            'nombres' => mb_convert_case($firstName, MB_CASE_TITLE, 'UTF-8'),
+            'apellidos' => mb_convert_case($lastName, MB_CASE_TITLE, 'UTF-8'),
+            'email' => $email,
+            'whatsapp' => $phone,
+        ]);
+        $pdo->commit();
+    } catch (Throwable $throwable) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $throwable;
+    }
 }
 
 function internalWhatsappAudit(int $tenantId, int $userId, ?int $requestId, string $eventType, string $result, array $metadata): void
