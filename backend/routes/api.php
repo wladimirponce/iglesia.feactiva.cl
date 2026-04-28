@@ -69,6 +69,80 @@ $router->get('/api/v1/agent/requests/{id}', [$agentController, 'show'], [
     TenantMiddleware::class,
 ]);
 
+$agendaController = new AgendaController();
+
+$router->get('/api/v1/agenda/items', [$agendaController, 'index'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.ver',
+]);
+
+$router->post('/api/v1/agenda/items', [$agendaController, 'store'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.crear',
+]);
+
+$router->get('/api/v1/agenda/day', [$agendaController, 'day'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.ver',
+]);
+
+$router->get('/api/v1/agenda/personas/{persona_id}', [$agendaController, 'byPersona'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.ver',
+]);
+
+$router->get('/api/v1/agenda/familias/{familia_id}', [$agendaController, 'byFamilia'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.ver',
+]);
+
+$router->get('/api/v1/agenda/items/{id}', [$agendaController, 'show'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.ver',
+]);
+
+$router->add('PATCH', '/api/v1/agenda/items/{id}', [$agendaController, 'update'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.editar',
+]);
+
+$router->post('/api/v1/agenda/items/{id}/cancelar', [$agendaController, 'cancel'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.cancelar',
+]);
+
+$router->post('/api/v1/agenda/items/{id}/completar', [$agendaController, 'complete'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+], [
+    'module' => 'agenda',
+    'permission' => 'agenda.items.completar',
+]);
+
 $crmPersonasController = new CrmPersonasController();
 
 $router->get('/api/v1/crm/personas', [$crmPersonasController, 'index'], [

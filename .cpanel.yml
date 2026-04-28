@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    - /bin/mkdir -p storage logs
+    - /bin/chmod 755 storage logs
+    - /bin/find backend -name "*.php" -exec /bin/chmod 644 {} \;
+    - /bin/chmod 644 frontend/.htaccess frontend/api/.htaccess backend/public/.htaccess

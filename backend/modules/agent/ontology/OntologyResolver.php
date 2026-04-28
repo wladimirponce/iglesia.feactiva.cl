@@ -43,6 +43,30 @@ final class OntologyResolver
 
     private function detectAction(string $text): ?string
     {
+        if (preg_match('/\b(envia|enviar|manda|mandar)\s+whatsapp\b/u', $text) === 1) {
+            return 'programar_whatsapp';
+        }
+
+        if (preg_match('/\b(que tengo agendado|que tengo para|agenda para|ver agenda)\b/u', $text) === 1) {
+            return 'consultar_agenda_dia';
+        }
+
+        if (preg_match('/\b(marca|marcar)\s+como\s+completad[ao]\b/u', $text) === 1) {
+            return 'completar_agenda_item';
+        }
+
+        if (preg_match('/\b(cancela|cancelar)\b.*\b(llamada|reunion|recordatorio|agenda|tarea)\b/u', $text) === 1) {
+            return 'cancelar_agenda_item';
+        }
+
+        if (preg_match('/\b(agenda|agendar)\b.*\b(reunion|reuni[oó]n)\b/u', $text) === 1 || preg_match('/\breunion\s+con\b/u', $text) === 1) {
+            return 'agendar_reunion';
+        }
+
+        if (preg_match('/\b(recuerdame|recu[eé]rdame)\b.*\bllamar\b/u', $text) === 1 || preg_match('/\b(agenda|agendar)\b.*\b(llamada|llamar)\b/u', $text) === 1) {
+            return 'agendar_llamada';
+        }
+
         if (preg_match('/\b(busca|buscar|encuentra|encontrar)\s+(una\s+)?persona\b/u', $text) === 1) {
             return 'buscar_persona';
         }
@@ -92,7 +116,7 @@ final class OntologyResolver
         }
 
         if (preg_match('/\b(que tengo agendado|buscar recordatorio|ver recordatorios|agenda para)\b/u', $text) === 1) {
-            return 'buscar_recordatorio';
+            return 'consultar_agenda_dia';
         }
 
         if (preg_match('/\b(recuerdame|recuérdame|recordatorio|agenda)\b/u', $text) === 1) {
@@ -122,8 +146,14 @@ final class OntologyResolver
             'asignar_discipulado' => $this->extractDiscipulado($text),
             'crear_solicitud_oracion' => $this->extractPrayer($text, $originalText),
             'crear_caso_pastoral' => $this->extractPastoralCase($text, $originalText),
+            'agendar_llamada' => $this->extractAgendaItem($text, $originalText, 'call'),
+            'agendar_reunion' => $this->extractAgendaItem($text, $originalText, 'meeting'),
+            'programar_whatsapp' => $this->extractWhatsappSchedule($text, $originalText),
+            'consultar_agenda_dia' => ['fecha_texto' => $originalText, 'fecha' => null],
+            'completar_agenda_item' => $this->extractAgendaReference($text),
+            'cancelar_agenda_item' => $this->extractAgendaReference($text),
             'crear_recordatorio' => $this->extractReminder($text, $originalText),
-            'buscar_recordatorio' => $this->extractDateRange($text),
+            'buscar_recordatorio' => ['fecha_texto' => $originalText, 'fecha' => null],
             default => [],
         };
     }
@@ -343,6 +373,70 @@ final class OntologyResolver
         return (float) str_replace('.', '', $matches[1]);
     }
 
+    private function extractAgendaItem(string $text, string $originalText, string $tipo): array
+    {
+        $fields = [
+            'tipo' => $tipo,
+            'titulo' => $tipo === 'call' ? 'Llamar' : 'Reunion',
+            'descripcion' => $originalText,
+            'fecha_texto' => $originalText,
+        ];
+
+        if (preg_match('/\b(?:llamar\s+a|con)\s+([a-z]+(?:\s+[a-z]+){0,3})/u', $text, $matches) === 1) {
+            $name = $this->cleanEntityName($matches[1]);
+            if (!in_array($name, ['familia', 'las', 'manana', 'hoy'], true)) {
+                $fields['persona_nombre'] = $this->titleName($name);
+                $fields['titulo'] = ($tipo === 'call' ? 'Llamar a ' : 'Reunion con ') . $fields['persona_nombre'];
+            }
+        }
+
+        if (preg_match('/familia\s+([a-z]+(?:\s+[a-z]+){0,3})/u', $text, $matches) === 1) {
+            $fields['familia_nombre'] = $this->titleName($this->cleanEntityName($matches[1]));
+            $fields['titulo'] = 'Reunion con familia ' . $fields['familia_nombre'];
+            unset($fields['persona_nombre']);
+        }
+
+        return $fields;
+    }
+
+    private function extractWhatsappSchedule(string $text, string $originalText): array
+    {
+        $message = '';
+        if (str_contains($originalText, ':')) {
+            $message = trim(explode(':', $originalText, 2)[1]);
+        } elseif (preg_match('/\bdiciendo\s+(.+)$/u', $text, $matches) === 1) {
+            $message = trim($matches[1]);
+        }
+
+        $fields = [
+            'fecha_texto' => $originalText,
+            'message_text' => $message !== '' ? $message : null,
+            'titulo' => 'WhatsApp programado',
+        ];
+
+        if (preg_match('/whatsapp\s+a\s+([a-z]+(?:\s+[a-z]+){0,3})/u', $text, $matches) === 1) {
+            $fields['persona_nombre'] = $this->titleName($this->cleanEntityName($matches[1]));
+        }
+
+        return $fields;
+    }
+
+    private function extractAgendaReference(string $text): array
+    {
+        $fields = ['query' => $text];
+        if (preg_match('/\bcon\s+([a-z]+(?:\s+[a-z]+){0,3})/u', $text, $matches) === 1) {
+            $fields['persona_nombre'] = $this->titleName($this->cleanEntityName($matches[1]));
+        }
+        return $fields;
+    }
+
+    private function cleanEntityName(string $value): string
+    {
+        $value = trim($value);
+        $value = preg_replace('/\b(hoy|manana|maÃ±ana|pasado|el|lunes|martes|miercoles|jueves|viernes|sabado|domingo|a|las|diciendo)\b.*$/u', '', $value) ?? $value;
+        return trim($value);
+    }
+
     private function extractDate(string $text): ?string
     {
         if (preg_match('/\b(20[0-9]{2}-[0-9]{2}-[0-9]{2})\b/u', $text, $matches) === 1) {
@@ -396,7 +490,9 @@ final class OntologyResolver
 
     private function normalize(string $value): string
     {
-        return trim(mb_strtolower(preg_replace('/\s+/', ' ', $value) ?? $value, 'UTF-8'));
+        $value = mb_strtolower(preg_replace('/\s+/', ' ', $value) ?? $value, 'UTF-8');
+        $normalized = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        return trim($normalized === false ? $value : $normalized);
     }
 
     private function titleName(string $value): string

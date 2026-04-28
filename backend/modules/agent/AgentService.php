@@ -324,6 +324,23 @@ final class AgentService
             $fields['_entity_resolution'] = $resolved['results'];
         }
 
+        if (isset($fields['fecha_texto']) && (!isset($fields['fecha_inicio']) || $fields['fecha_inicio'] === null)) {
+            $dateResult = (new DateTimeResolver())->resolve((string) $fields['fecha_texto']);
+            if (($dateResult['resolved'] ?? false) === true) {
+                $fields['fecha_inicio'] = $dateResult['datetime'];
+                $fields['fecha'] = substr((string) $dateResult['datetime'], 0, 10);
+            }
+        }
+
+        if (in_array($action, ['completar_agenda_item', 'cancelar_agenda_item'], true) && (!isset($fields['agenda_item_id']) || $fields['agenda_item_id'] === null)) {
+            $agendaMatch = $this->resolveAgendaItemId($tenantId, $fields);
+            if ($agendaMatch['status'] === 'resolved') {
+                $fields['agenda_item_id'] = $agendaMatch['id'];
+            } elseif ($agendaMatch['status'] === 'ambiguous') {
+                $fields['_agenda_ambiguous'] = $agendaMatch['options'];
+            }
+        }
+
         if (isset($fields['cuenta_nombre']) && (!isset($fields['cuenta_id']) || $fields['cuenta_id'] === null)) {
             $fields['cuenta_id'] = $this->resolveCuentaId($tenantId, (string) $fields['cuenta_nombre']);
         }
@@ -396,6 +413,15 @@ final class AgentService
             $fields['persona_id'] = $fields['persona_id'] ?? null;
         }
 
+        if (in_array($action, ['agendar_llamada', 'agendar_reunion', 'crear_recordatorio'], true)) {
+            $fields['prioridad'] = $fields['prioridad'] ?? 'medium';
+            $fields['modulo_origen'] = $fields['modulo_origen'] ?? 'agent';
+        }
+
+        if ($action === 'programar_whatsapp') {
+            $fields['fecha_inicio'] = $fields['fecha_inicio'] ?? null;
+        }
+
         return $fields;
     }
 
@@ -431,6 +457,14 @@ final class AgentService
             ];
         }
 
+        if (is_array($input['_agenda_ambiguous'] ?? null)) {
+            return [
+                'reason' => 'entity_ambiguous',
+                'ambiguous_entities' => ['agenda_item_id' => $input['_agenda_ambiguous']],
+                'missing_fields' => ['agenda_item_id'],
+            ];
+        }
+
         if ($notFound !== []) {
             return [
                 'reason' => 'entity_not_found',
@@ -440,6 +474,47 @@ final class AgentService
         }
 
         return null;
+    }
+
+    private function resolveAgendaItemId(int $tenantId, array $fields): array
+    {
+        $where = ["tenant_id = :tenant_id", "deleted_at IS NULL", "estado = 'pending'"];
+        $params = ['tenant_id' => $tenantId];
+
+        if (isset($fields['persona_id']) && (int) $fields['persona_id'] > 0) {
+            $where[] = 'persona_id = :persona_id';
+            $params['persona_id'] = (int) $fields['persona_id'];
+        }
+
+        $query = strtolower((string) ($fields['query'] ?? ''));
+        if (str_contains($query, 'llamada')) {
+            $where[] = "tipo = 'call'";
+        } elseif (str_contains($query, 'reunion')) {
+            $where[] = "tipo = 'meeting'";
+        }
+
+        $sql = "
+            SELECT
+                id,
+                tipo,
+                titulo,
+                fecha_inicio
+            FROM agenda_items
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY fecha_inicio ASC, id ASC
+            LIMIT 6
+        ";
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute($params);
+        $rows = $statement->fetchAll();
+
+        if (count($rows) === 1) {
+            return ['status' => 'resolved', 'id' => (int) $rows[0]['id']];
+        }
+        if (count($rows) > 1) {
+            return ['status' => 'ambiguous', 'options' => $rows];
+        }
+        return ['status' => 'not_found'];
     }
 
     private function shouldAutoCreatePersonForAction(string $action): bool

@@ -26,6 +26,12 @@ final class AgentToolRegistry
         $this->register(new PastoralCreatePrayerRequestTool());
         $this->register(new ReminderCreateTool());
         $this->register(new ReminderSearchTool());
+        $this->register(new AgendaCreateItemTool());
+        $this->register(new AgendaSearchItemsTool());
+        $this->register(new AgendaCreateWhatsappNotificationTool());
+        $this->register(new AgendaGetDayScheduleTool());
+        $this->register(new AgendaCompleteItemTool());
+        $this->register(new AgendaCancelItemTool());
     }
 
     public function get(string $name): ?AgentToolInterface

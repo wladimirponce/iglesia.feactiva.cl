@@ -58,6 +58,7 @@ final class AgentResponseComposer
                 'missing_person_update_data', 'missing_family_data', 'missing_family_assign_data',
                 'missing_discipulado_data', 'missing_stage_data', 'missing_pastoral_case_data',
                 'missing_ontology_data',
+                'AGENT_TOOL_MISSING_AGENDA_DATA', 'AGENT_TOOL_MISSING_NOTIFICATION_DATA', 'AGENT_TOOL_MISSING_AGENDA_ITEM',
             ], true)) {
                 return 'Me faltan datos para ejecutar esa accion. Indica: ' . ($missingFields !== '' ? $missingFields : 'datos obligatorios') . '.';
             }
@@ -191,6 +192,39 @@ final class AgentResponseComposer
                 return 'No tienes recordatorios en ese periodo.';
             }
             return 'Tienes ' . count($items) . ' recordatorio(s) en ese periodo.';
+        }
+
+        if ($toolName === 'agenda_create_item') {
+            return sprintf(
+                'Listo, agende %s para %s.',
+                (string) ($output['titulo'] ?? 'el item'),
+                (string) ($output['fecha_inicio'] ?? '')
+            );
+        }
+
+        if ($toolName === 'agenda_get_day_schedule') {
+            $items = is_array($output['items'] ?? null) ? $output['items'] : [];
+            if ($items === []) {
+                return 'No tienes items agendados para ese dia.';
+            }
+            $lines = array_map(static fn (array $item): string => sprintf(
+                '%s %s',
+                substr((string) $item['fecha_inicio'], 11, 5),
+                (string) $item['titulo']
+            ), array_slice($items, 0, 5));
+            return 'Para ese dia tienes: ' . implode('; ', $lines) . '.';
+        }
+
+        if ($toolName === 'agenda_create_whatsapp_notification') {
+            return sprintf('Listo, deje programado un WhatsApp para %s.', (string) ($output['scheduled_at'] ?? ''));
+        }
+
+        if ($toolName === 'agenda_complete_item') {
+            return sprintf('Listo, marque como completado: %s.', (string) ($output['titulo'] ?? 'item de agenda'));
+        }
+
+        if ($toolName === 'agenda_cancel_item') {
+            return sprintf('Listo, cancele: %s.', (string) ($output['titulo'] ?? 'item de agenda'));
         }
 
         return $this->compose($intent);

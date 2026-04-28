@@ -24,6 +24,8 @@ final class OntologyRegistry
         $this->registerObject(new OntologyObject('SolicitudOracion', 'pastoral', 'Solicitud de oracion pastoral.'));
         $this->registerObject(new OntologyObject('RutaDiscipulado', 'discipulado', 'Ruta de crecimiento o discipulado.'));
         $this->registerObject(new OntologyObject('Recordatorio', 'agenda', 'Recordatorio agendado para seguimiento.'));
+        $this->registerObject(new OntologyObject('AgendaItem', 'agenda', 'Item de agenda, llamada, reunion, tarea o seguimiento.'));
+        $this->registerObject(new OntologyObject('AgendaNotification', 'agenda', 'Notificacion programada de agenda.'));
 
         $this->relations[] = new OntologyRelation('Persona', 'pertenece_a', 'Familia');
         $this->relations[] = new OntologyRelation('Persona', 'tiene', 'MovimientoFinanciero');
@@ -45,8 +47,14 @@ final class OntologyRegistry
         $this->registerAction(new OntologyAction('asignar_discipulado', 'RutaDiscipulado', 'discipulado_assign_route', 'disc.avance.editar', ['persona_id', 'ruta_id'], ['mentor_persona_id'], 'medium', false));
         $this->registerAction(new OntologyAction('crear_solicitud_oracion', 'SolicitudOracion', 'pastoral_create_prayer_request', 'past.oracion.crear', ['detalle'], ['persona_id', 'titulo', 'privacidad'], 'medium', false));
         $this->registerAction(new OntologyAction('crear_caso_pastoral', 'CasoPastoral', 'pastoral_create_case', 'past.casos.crear', ['persona_id', 'titulo'], ['tipo', 'prioridad', 'descripcion_general', 'es_confidencial'], 'high', true));
-        $this->registerAction(new OntologyAction('crear_recordatorio', 'Recordatorio', 'reminder_create', 'agenda.recordatorios.crear', ['titulo', 'fecha_hora'], ['persona_id', 'descripcion', 'modulo_origen', 'referencia_id'], 'low', false));
-        $this->registerAction(new OntologyAction('buscar_recordatorio', 'Recordatorio', 'reminder_search', 'agenda.recordatorios.ver', ['fecha_inicio', 'fecha_fin'], ['persona_id'], 'low', false));
+        $this->registerAction(new OntologyAction('crear_recordatorio', 'AgendaItem', 'agenda_create_item', 'agenda.items.crear', ['titulo', 'fecha_inicio'], ['persona_id', 'familia_id', 'descripcion', 'tipo', 'prioridad'], 'low', false));
+        $this->registerAction(new OntologyAction('agendar_llamada', 'AgendaItem', 'agenda_create_item', 'agenda.items.crear', ['titulo', 'fecha_inicio'], ['persona_id', 'persona_nombre', 'descripcion', 'tipo'], 'low', false));
+        $this->registerAction(new OntologyAction('agendar_reunion', 'AgendaItem', 'agenda_create_item', 'agenda.items.crear', ['titulo', 'fecha_inicio'], ['persona_id', 'familia_id', 'familia_nombre', 'descripcion', 'tipo'], 'low', false));
+        $this->registerAction(new OntologyAction('programar_whatsapp', 'AgendaNotification', 'agenda_create_whatsapp_notification', 'agenda.notifications.crear', ['fecha_inicio', 'message_text'], ['persona_id', 'persona_nombre', 'phone'], 'medium', false));
+        $this->registerAction(new OntologyAction('consultar_agenda_dia', 'AgendaItem', 'agenda_get_day_schedule', 'agenda.items.ver', ['fecha'], [], 'low', false));
+        $this->registerAction(new OntologyAction('completar_agenda_item', 'AgendaItem', 'agenda_complete_item', 'agenda.items.completar', ['agenda_item_id'], ['persona_id', 'persona_nombre', 'query'], 'medium', false));
+        $this->registerAction(new OntologyAction('cancelar_agenda_item', 'AgendaItem', 'agenda_cancel_item', 'agenda.items.cancelar', ['agenda_item_id'], ['persona_id', 'persona_nombre', 'query'], 'medium', false));
+        $this->registerAction(new OntologyAction('buscar_recordatorio', 'AgendaItem', 'agenda_get_day_schedule', 'agenda.items.ver', ['fecha'], ['persona_id'], 'low', false));
     }
 
     public function object(string $name): ?OntologyObject
