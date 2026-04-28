@@ -26,7 +26,7 @@ final class PastoralCreatePrayerRequestTool implements AgentToolInterface
         $detalle = trim((string) ($input['detalle'] ?? ''));
         $privacidad = trim((string) ($input['privacidad'] ?? 'privada'));
 
-        if ($personaId < 1 || $detalle === '') {
+        if ($detalle === '') {
             throw new RuntimeException('AGENT_TOOL_PRAYER_DATA_REQUIRED');
         }
 
@@ -34,6 +34,60 @@ final class PastoralCreatePrayerRequestTool implements AgentToolInterface
             throw new RuntimeException('AGENT_TOOL_INVALID_PRIVACY');
         }
 
+        if ($personaId > 0 && !$this->personExists($tenantId, $personaId)) {
+            $personaId = 0;
+        }
+
+        $sql = "
+            INSERT INTO past_solicitudes_oracion (
+                tenant_id,
+                persona_id,
+                nombre_solicitante,
+                contacto_solicitante,
+                titulo,
+                detalle,
+                categoria,
+                privacidad,
+                estado,
+                created_by
+            ) VALUES (
+                :tenant_id,
+                :persona_id,
+                :nombre_solicitante,
+                :contacto_solicitante,
+                :titulo,
+                :detalle,
+                :categoria,
+                :privacidad,
+                'recibida',
+                :created_by
+            )
+        ";
+
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute([
+            'tenant_id' => $tenantId,
+            'persona_id' => $personaId > 0 ? $personaId : null,
+            'nombre_solicitante' => $this->nullable($input['nombre_solicitante'] ?? null),
+            'contacto_solicitante' => $this->nullable($input['contacto_solicitante'] ?? null),
+            'titulo' => $titulo,
+            'detalle' => $detalle,
+            'categoria' => $this->nullable($input['categoria'] ?? null),
+            'privacidad' => $privacidad,
+            'created_by' => $userId,
+        ]);
+
+        return [
+            'id' => (int) Database::connection()->lastInsertId(),
+            'persona_id' => $personaId > 0 ? $personaId : null,
+            'titulo' => $titulo,
+            'privacidad' => $privacidad,
+            'estado' => 'recibida',
+        ];
+    }
+
+    private function personExists(int $tenantId, int $personaId): bool
+    {
         $personaSql = "
             SELECT id
             FROM crm_personas
@@ -48,46 +102,16 @@ final class PastoralCreatePrayerRequestTool implements AgentToolInterface
             'persona_id' => $personaId,
         ]);
 
-        if ($personaStatement->fetchColumn() === false) {
-            throw new RuntimeException('CRM_PERSON_NOT_FOUND');
+        return $personaStatement->fetchColumn() !== false;
+    }
+
+    private function nullable(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
         }
 
-        $sql = "
-            INSERT INTO past_solicitudes_oracion (
-                tenant_id,
-                persona_id,
-                titulo,
-                detalle,
-                privacidad,
-                estado,
-                created_by
-            ) VALUES (
-                :tenant_id,
-                :persona_id,
-                :titulo,
-                :detalle,
-                :privacidad,
-                'recibida',
-                :created_by
-            )
-        ";
-
-        $statement = Database::connection()->prepare($sql);
-        $statement->execute([
-            'tenant_id' => $tenantId,
-            'persona_id' => $personaId,
-            'titulo' => $titulo,
-            'detalle' => $detalle,
-            'privacidad' => $privacidad,
-            'created_by' => $userId,
-        ]);
-
-        return [
-            'id' => (int) Database::connection()->lastInsertId(),
-            'persona_id' => $personaId,
-            'titulo' => $titulo,
-            'privacidad' => $privacidad,
-            'estado' => 'recibida',
-        ];
+        $value = trim($value);
+        return $value === '' ? null : $value;
     }
 }

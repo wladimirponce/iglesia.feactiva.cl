@@ -150,10 +150,14 @@ final class AgentResponseComposer
         }
 
         if ($toolName === 'pastoral_create_prayer_request') {
+            $personaText = ($output['persona_id'] ?? null) === null
+                ? 'sin persona asociada'
+                : 'para la persona ' . (string) ((int) $output['persona_id']);
+
             return sprintf(
-                'Solicitud de oracion creada con ID %d para la persona %d.',
+                'Solicitud de oracion creada con ID %d %s.',
                 (int) ($output['id'] ?? 0),
-                (int) ($output['persona_id'] ?? 0)
+                $personaText
             );
         }
 
