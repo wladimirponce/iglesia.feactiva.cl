@@ -125,6 +125,16 @@ final class AgentResponseComposer
         if ($toolName === 'crm_search_person') {
             $results = is_array($output['results'] ?? null) ? $output['results'] : [];
 
+            if (is_array($output['auto_created_person'] ?? null)) {
+                $person = $output['auto_created_person'];
+                return sprintf(
+                    'No encontre esa persona, asi que la cree como visita: #%d %s %s.',
+                    (int) ($person['id'] ?? 0),
+                    (string) ($person['nombres'] ?? ''),
+                    (string) ($person['apellidos'] ?? '')
+                );
+            }
+
             if ($results === []) {
                 return 'No encontre personas que coincidan con esa busqueda.';
             }

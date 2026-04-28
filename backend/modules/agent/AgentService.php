@@ -145,7 +145,7 @@ final class AgentService
             return null;
         }
 
-        $input = $this->buildOntologyToolInput($tenantId, $ontology, $inputText);
+        $input = $this->buildOntologyToolInput($tenantId, $userId, $requestId, $ontology, $inputText);
         $missing = $this->missingFields($input, $ontology->missingFields);
 
         if ($missing !== []) {
@@ -270,6 +270,10 @@ final class AgentService
             'module_code' => $tool->moduleCode(),
         ]);
 
+        if ($status === 'success' && $tool->name() === 'crm_search_person') {
+            $output = $this->createPersonWhenSearchHasNoResults($tenantId, $userId, $requestId, $input, $output);
+        }
+
         return [
             'tool_name' => $tool->name(),
             'module_code' => $tool->moduleCode(),
@@ -281,7 +285,7 @@ final class AgentService
     }
 
     /** @return array<string, mixed> */
-    private function buildOntologyToolInput(int $tenantId, OntologyResolutionResult $ontology, string $inputText): array
+    private function buildOntologyToolInput(int $tenantId, int $userId, int $requestId, OntologyResolutionResult $ontology, string $inputText): array
     {
         $fields = $ontology->extractedFields;
         $action = (string) $ontology->action;
@@ -297,6 +301,14 @@ final class AgentService
 
         if (isset($fields['persona_nombre']) && (!isset($fields['persona_id']) || $fields['persona_id'] === null)) {
             $fields['persona_id'] = $this->resolvePersonaId($tenantId, (string) $fields['persona_nombre']);
+
+            if ($fields['persona_id'] === null && $this->shouldAutoCreatePersonForAction($action)) {
+                $created = $this->createMinimalPerson($tenantId, $userId, $requestId, (string) $fields['persona_nombre']);
+                if ($created !== null) {
+                    $fields['persona_id'] = $created['id'];
+                    $fields['auto_created_person'] = $created;
+                }
+            }
         }
 
         if (isset($fields['familia_nombre']) && (!isset($fields['familia_id']) || $fields['familia_id'] === null)) {
@@ -350,6 +362,122 @@ final class AgentService
         }
 
         return $fields;
+    }
+
+    private function shouldAutoCreatePersonForAction(string $action): bool
+    {
+        return in_array($action, [
+            'crear_solicitud_oracion',
+            'crear_caso_pastoral',
+            'crear_recordatorio',
+            'asignar_persona_familia',
+            'asignar_discipulado',
+        ], true);
+    }
+
+    /** @param array<string, mixed> $input @param array<string, mixed> $output @return array<string, mixed> */
+    private function createPersonWhenSearchHasNoResults(int $tenantId, int $userId, int $requestId, array $input, array $output): array
+    {
+        $results = is_array($output['results'] ?? null) ? $output['results'] : [];
+        $query = trim((string) ($input['query'] ?? ''));
+
+        if ($results !== [] || $query === '') {
+            return $output;
+        }
+
+        $created = $this->createMinimalPerson($tenantId, $userId, $requestId, $query);
+        if ($created === null) {
+            $output['auto_create_person'] = [
+                'status' => 'blocked',
+                'reason' => 'missing_permission_or_invalid_name',
+            ];
+            return $output;
+        }
+
+        $output['auto_created_person'] = $created;
+        $output['results'] = [[
+            'id' => $created['id'],
+            'nombres' => $created['nombres'],
+            'apellidos' => $created['apellidos'],
+            'email' => null,
+            'telefono' => null,
+            'whatsapp' => null,
+            'estado_persona' => 'visita',
+        ]];
+
+        return $output;
+    }
+
+    /** @return array{id: int, nombres: string, apellidos: string}|null */
+    private function createMinimalPerson(int $tenantId, int $userId, int $requestId, string $name): ?array
+    {
+        if (!$this->permissionRepository->userHasPermission($userId, $tenantId, 'crm.personas.crear')) {
+            $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.tool.blocked', 'crm_create_person', 'denied', [
+                'required_permission' => 'crm.personas.crear',
+                'reason' => 'auto_create_person_missing_permission',
+            ]);
+            return null;
+        }
+
+        $parts = preg_split('/\s+/', trim($name));
+        if (!is_array($parts) || $parts === [] || trim((string) $parts[0]) === '') {
+            return null;
+        }
+
+        $input = [
+            'nombres' => mb_convert_case(trim((string) $parts[0]), MB_CASE_TITLE, 'UTF-8'),
+            'apellidos' => count($parts) > 1
+                ? mb_convert_case(trim(implode(' ', array_slice($parts, 1))), MB_CASE_TITLE, 'UTF-8')
+                : 'Por completar',
+            'estado_persona' => 'visita',
+        ];
+
+        $tool = $this->toolRegistry->get('crm_create_person');
+        if (!$tool instanceof AgentToolInterface) {
+            return null;
+        }
+
+        try {
+            $output = $tool->execute($tenantId, $userId, $input);
+            $status = 'success';
+            $eventType = 'agent.tool.executed';
+            $auditResult = 'success';
+        } catch (Throwable $exception) {
+            $output = [
+                'reason' => get_class($exception) === RuntimeException::class ? $exception->getMessage() : 'AGENT_TOOL_ERROR',
+            ];
+            $status = 'failed';
+            $eventType = 'agent.tool.failed';
+            $auditResult = 'failed';
+        }
+
+        $actionId = $this->repository->createAction(
+            $tenantId,
+            $requestId,
+            $userId,
+            'crm_create_person',
+            'crm',
+            $input,
+            $output,
+            $status,
+            $status === 'success' ? 'crm_personas' : null,
+            isset($output['id']) ? (int) $output['id'] : null
+        );
+        $this->auditLogger->logTool($tenantId, $userId, $requestId, $eventType, 'crm_create_person', $auditResult, [
+            'action_id' => $actionId,
+            'module_code' => 'crm',
+            'auto_created' => true,
+        ]);
+
+        if ($status !== 'success' || !isset($output['id'])) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $output['id'],
+            'nombres' => (string) $output['nombres'],
+            'apellidos' => (string) $output['apellidos'],
+        ];
     }
 
     /** @return array{tool_name: string, input: array, missing_data?: bool}|null */
