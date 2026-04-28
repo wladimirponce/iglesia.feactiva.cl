@@ -26,15 +26,37 @@ final class AgentService
                 'conversation_id' => $conversationId,
             ]);
 
-            $intent = $this->intentRouter->detect($inputText);
-            $ontology = $this->ontologyResolver?->resolve($inputText);
+            $ontology = $this->ontologyResolver?->resolve([
+                'input_text' => $inputText,
+                'tenant_id' => $tenantId,
+                'user_id' => $userId,
+            ]);
+            $ontologyData = $ontology instanceof OntologyResolutionResult ? $ontology->toArray() : null;
+            $intent = $ontology instanceof OntologyResolutionResult && $ontology->resolved
+                ? (string) $ontology->action
+                : $this->intentRouter->detect($inputText);
             $this->repository->updateIntent($tenantId, $requestId, $intent);
+
+            if ($ontology instanceof OntologyResolutionResult) {
+                if ($ontology->resolved) {
+                    $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.resolved', (string) $ontology->action, 'success', [
+                        'ontology' => $ontologyData,
+                    ]);
+                } else {
+                    $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.unresolved', 'unresolved', 'failed', [
+                        'input_text' => $inputText,
+                    ]);
+                }
+            }
+
             $this->auditLogger->log($tenantId, $userId, $requestId, 'agent.intent.detected', [
                 'normalized_intent' => $intent,
-                'ontology' => $ontology,
+                'ontology' => $ontologyData,
             ]);
 
-            $toolExecution = $this->executeToolForIntent($tenantId, $userId, $requestId, $intent, $inputText);
+            $toolExecution = $ontology instanceof OntologyResolutionResult && $ontology->resolved
+                ? $this->executeToolForOntology($tenantId, $userId, $requestId, $ontology, $inputText)
+                : $this->executeToolForIntent($tenantId, $userId, $requestId, $intent, $inputText);
             $responseText = $this->responseComposer->compose($intent, $toolExecution);
             $responseId = $this->repository->createResponse($tenantId, $requestId, $intent, $responseText);
             $this->auditLogger->log($tenantId, $userId, $requestId, 'agent.response.generated', [
@@ -109,6 +131,46 @@ final class AgentService
             return null;
         }
 
+        return $this->executeToolRoute($tenantId, $userId, $requestId, $route);
+    }
+
+    private function executeToolForOntology(
+        int $tenantId,
+        int $userId,
+        int $requestId,
+        OntologyResolutionResult $ontology,
+        string $inputText
+    ): ?array {
+        if ($ontology->toolName === null) {
+            return null;
+        }
+
+        $input = $this->buildOntologyToolInput($tenantId, $ontology, $inputText);
+        $missing = $this->missingFields($input, $ontology->missingFields);
+
+        if ($missing !== []) {
+            $this->auditLogger->logTool($tenantId, $userId, $requestId, 'agent.ontology.missing_fields', (string) $ontology->action, 'failed', [
+                'ontology' => $ontology->toArray(),
+                'missing_fields' => $missing,
+            ]);
+        }
+
+        return $this->executeToolRoute($tenantId, $userId, $requestId, [
+            'tool_name' => $ontology->toolName,
+            'input' => $input,
+            'missing_data' => $missing !== [],
+            'missing_reason' => 'missing_ontology_data',
+            'missing_fields' => $missing,
+        ]);
+    }
+
+    /** @param array{tool_name: string, input: array, missing_data?: bool, missing_reason?: string, missing_fields?: array} $route */
+    private function executeToolRoute(
+        int $tenantId,
+        int $userId,
+        int $requestId,
+        array $route
+    ): ?array {
         $tool = $this->toolRegistry->get($route['tool_name']);
 
         if (!$tool instanceof AgentToolInterface) {
@@ -216,6 +278,78 @@ final class AgentService
             'output' => $output,
             'action_id' => $actionId,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function buildOntologyToolInput(int $tenantId, OntologyResolutionResult $ontology, string $inputText): array
+    {
+        $fields = $ontology->extractedFields;
+        $action = (string) $ontology->action;
+
+        if (isset($fields['cuenta_nombre']) && (!isset($fields['cuenta_id']) || $fields['cuenta_id'] === null)) {
+            $fields['cuenta_id'] = $this->resolveCuentaId($tenantId, (string) $fields['cuenta_nombre']);
+        }
+
+        if (isset($fields['categoria_nombre']) && (!isset($fields['categoria_id']) || $fields['categoria_id'] === null)) {
+            $tipo = $ontology->toolName === 'finanzas_create_expense' ? 'egreso' : 'ingreso';
+            $fields['categoria_id'] = $this->resolveCategoriaId($tenantId, $tipo, (string) $fields['categoria_nombre']);
+        }
+
+        if (isset($fields['persona_nombre']) && (!isset($fields['persona_id']) || $fields['persona_id'] === null)) {
+            $fields['persona_id'] = $this->resolvePersonaId($tenantId, (string) $fields['persona_nombre']);
+        }
+
+        if (isset($fields['familia_nombre']) && (!isset($fields['familia_id']) || $fields['familia_id'] === null)) {
+            $fields['familia_id'] = $this->resolveFamiliaId($tenantId, (string) $fields['familia_nombre']);
+        }
+
+        if (isset($fields['ruta_nombre']) && (!isset($fields['ruta_id']) || $fields['ruta_id'] === null)) {
+            $fields['ruta_id'] = $this->resolveRutaId($tenantId, (string) $fields['ruta_nombre']);
+        }
+
+        if ($action === 'registrar_diezmo' || $action === 'registrar_ofrenda') {
+            $subtipo = $action === 'registrar_diezmo' ? 'diezmo' : 'ofrenda';
+            $fields['categoria_id'] = $fields['categoria_id'] ?? $this->resolveCategoriaId($tenantId, 'ingreso', $subtipo);
+            $fields['centro_costo_id'] = $fields['centro_costo_id'] ?? null;
+            $fields['persona_id'] = $fields['persona_id'] ?? null;
+            $fields['fecha_movimiento'] = $fields['fecha_movimiento'] ?? date('Y-m-d');
+            $fields['medio_pago'] = $fields['medio_pago'] ?? 'efectivo';
+            $fields['descripcion'] = $fields['descripcion'] ?? $inputText;
+            $fields['subtipo'] = $subtipo;
+        }
+
+        if ($action === 'registrar_egreso') {
+            $fields['centro_costo_id'] = $fields['centro_costo_id'] ?? null;
+            $fields['fecha_movimiento'] = $fields['fecha_movimiento'] ?? date('Y-m-d');
+            $fields['medio_pago'] = $fields['medio_pago'] ?? 'efectivo';
+            $fields['descripcion'] = $fields['descripcion'] ?? $inputText;
+        }
+
+        if ($action === 'crear_solicitud_oracion') {
+            $fields['titulo'] = $fields['titulo'] ?? 'Peticion de oracion';
+            $fields['privacidad'] = $fields['privacidad'] ?? 'privada';
+            $fields['persona_id'] = $fields['persona_id'] ?? null;
+        }
+
+        if ($action === 'crear_caso_pastoral') {
+            $fields['tipo'] = $fields['tipo'] ?? 'acompanamiento';
+            $fields['prioridad'] = $fields['prioridad'] ?? 'media';
+            $fields['descripcion_general'] = $fields['descripcion_general'] ?? $inputText;
+            $fields['es_confidencial'] = $fields['es_confidencial'] ?? true;
+        }
+
+        if ($action === 'crear_recordatorio') {
+            $fields['persona_id'] = $fields['persona_id'] ?? null;
+            $fields['descripcion'] = $fields['descripcion'] ?? $inputText;
+            $fields['modulo_origen'] = $fields['modulo_origen'] ?? 'agent';
+            $fields['referencia_id'] = $fields['referencia_id'] ?? null;
+        }
+
+        if ($action === 'buscar_recordatorio') {
+            $fields['persona_id'] = $fields['persona_id'] ?? null;
+        }
+
+        return $fields;
     }
 
     /** @return array{tool_name: string, input: array, missing_data?: bool}|null */

@@ -101,6 +101,7 @@ require_once __DIR__ . '/../modules/agent/ontology/OntologyObject.php';
 require_once __DIR__ . '/../modules/agent/ontology/OntologyRelation.php';
 require_once __DIR__ . '/../modules/agent/ontology/OntologyAction.php';
 require_once __DIR__ . '/../modules/agent/ontology/OntologyPermission.php';
+require_once __DIR__ . '/../modules/agent/ontology/OntologyResolutionResult.php';
 require_once __DIR__ . '/../modules/agent/ontology/OntologyRegistry.php';
 require_once __DIR__ . '/../modules/agent/ontology/OntologyResolver.php';
 require_once __DIR__ . '/../modules/agent/tools/AgentToolInterface.php';

@@ -41,6 +41,7 @@ final class AgentResponseComposer
                 'missing_finance_data', 'missing_person_data', 'missing_reminder_data',
                 'missing_person_update_data', 'missing_family_data', 'missing_family_assign_data',
                 'missing_discipulado_data', 'missing_stage_data', 'missing_pastoral_case_data',
+                'missing_ontology_data',
             ], true)) {
                 return 'Me faltan datos para ejecutar esa accion: ' . ($missingFields !== '' ? $missingFields : 'datos obligatorios') . '.';
             }
