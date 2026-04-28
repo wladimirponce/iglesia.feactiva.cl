@@ -321,6 +321,7 @@ final class AgentService
 
         if ($action === 'registrar_diezmo' || $action === 'registrar_ofrenda') {
             $subtipo = $action === 'registrar_diezmo' ? 'diezmo' : 'ofrenda';
+            $fields['cuenta_id'] = $fields['cuenta_id'] ?? $this->resolveDefaultCuentaId($tenantId);
             $fields['categoria_id'] = $fields['categoria_id'] ?? $this->resolveCategoriaId($tenantId, 'ingreso', $subtipo);
             $fields['centro_costo_id'] = $fields['centro_costo_id'] ?? null;
             $fields['persona_id'] = $fields['persona_id'] ?? null;
@@ -753,7 +754,7 @@ final class AgentService
         $cuentaQuery = $this->textAfterKeyword($inputText, 'en') ?? 'Caja principal';
 
         return [
-            'cuenta_id' => $this->resolveCuentaId($tenantId, $cuentaQuery),
+            'cuenta_id' => $this->resolveCuentaId($tenantId, $cuentaQuery) ?? $this->resolveDefaultCuentaId($tenantId),
             'categoria_id' => $this->resolveCategoriaId($tenantId, $tipo, $categoriaQuery),
             'centro_costo_id' => null,
             'persona_id' => null,
@@ -912,6 +913,22 @@ final class AgentService
             LIMIT 1
         ");
         $statement->execute(['tenant_id' => $tenantId, 'query' => '%' . trim($query) . '%']);
+        $id = $statement->fetchColumn();
+        return $id === false ? null : (int) $id;
+    }
+
+    private function resolveDefaultCuentaId(int $tenantId): ?int
+    {
+        $statement = Database::connection()->prepare("
+            SELECT id
+            FROM fin_cuentas
+            WHERE tenant_id = :tenant_id
+              AND deleted_at IS NULL
+              AND es_activa = 1
+            ORDER BY es_principal DESC, id ASC
+            LIMIT 1
+        ");
+        $statement->execute(['tenant_id' => $tenantId]);
         $id = $statement->fetchColumn();
         return $id === false ? null : (int) $id;
     }
