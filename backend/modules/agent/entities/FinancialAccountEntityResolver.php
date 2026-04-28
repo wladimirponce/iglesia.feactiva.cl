@@ -35,6 +35,9 @@ final class FinancialAccountEntityResolver
     {
         $operator = $exact ? '=' : 'LIKE';
         $value = $exact ? $query : '%' . $query . '%';
+        $normalizedQuery = mb_strtolower(trim($query), 'UTF-8');
+        $canMatchType = in_array($normalizedQuery, ['caja', 'banco', 'digital', 'otro'], true);
+        $typeCondition = $canMatchType ? " OR tipo = :query_tipo" : "";
         $sql = "
             SELECT
                 id,
@@ -46,13 +49,18 @@ final class FinancialAccountEntityResolver
             WHERE tenant_id = :tenant_id
               AND deleted_at IS NULL
               AND es_activa = 1
-              AND (nombre {$operator} :query OR tipo {$operator} :query OR banco {$operator} :query)
+              AND (nombre {$operator} :query OR banco {$operator} :query{$typeCondition})
             ORDER BY es_principal DESC, id ASC
             LIMIT 6
         ";
 
         $statement = Database::connection()->prepare($sql);
-        $statement->execute(['tenant_id' => $tenantId, 'query' => $value]);
+        $params = ['tenant_id' => $tenantId, 'query' => $value];
+        if ($canMatchType) {
+            $params['query_tipo'] = $normalizedQuery;
+        }
+
+        $statement->execute($params);
         return $statement->fetchAll();
     }
 
