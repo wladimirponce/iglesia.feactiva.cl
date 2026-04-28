@@ -8,6 +8,8 @@
     # Endpoint interno server-to-server: ejecutar archivo directo.
     RewriteRule ^internal/whatsapp/identify\.php$ - [L]
     RewriteRule ^internal/whatsapp/message\.php$ - [L]
+    RewriteRule ^internal/agent/ontology\.php$ - [L]
+    RewriteRule ^internal/agent/execute\.php$ - [L]
 
     # Frontend estatico: servir archivos existentes y dejar fallback a index.html.
     RewriteCond %{REQUEST_FILENAME} !-d

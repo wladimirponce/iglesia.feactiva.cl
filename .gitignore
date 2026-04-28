@@ -4,5 +4,8 @@
 logs/
 storage/
 *.log
+__pycache__/
+.venv/
+.pytest_cache/
 .DS_Store
 Thumbs.db
