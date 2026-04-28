@@ -35,6 +35,11 @@ require_once __DIR__ . '/../../../modules/agent/tools/PastoralCreatePrayerReques
 require_once __DIR__ . '/../../../modules/agent/tools/ReminderCreateTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/ReminderSearchTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgentToolRegistry.php';
+require_once __DIR__ . '/../../../modules/agent/sqlskills/AgentSqlSafetyGuard.php';
+require_once __DIR__ . '/../../../modules/agent/sqlskills/AgentSqlSkillCatalog.php';
+require_once __DIR__ . '/../../../modules/agent/sqlskills/AgentSqlSkillGenerator.php';
+require_once __DIR__ . '/../../../modules/agent/sqlskills/AgentSqlSkillApproval.php';
+require_once __DIR__ . '/../../../modules/agent/sqlskills/AgentSqlSkillExecutor.php';
 require_once __DIR__ . '/../../../modules/agent/AgentService.php';
 require_once __DIR__ . '/../../../middlewares/IntegrationAuthMiddleware.php';
 

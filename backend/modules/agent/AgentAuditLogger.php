@@ -46,15 +46,40 @@ final class AgentAuditLogger
         ]);
     }
 
+    public function logSqlSkill(
+        int $tenantId,
+        int $userId,
+        string $eventType,
+        string $action,
+        string $result,
+        int $skillId,
+        array $metadata = []
+    ): void {
+        $this->logEvent(
+            $tenantId,
+            $userId,
+            null,
+            $eventType,
+            $eventType,
+            $action,
+            $result,
+            $metadata,
+            'agent_sql_skill',
+            $skillId > 0 ? $skillId : null
+        );
+    }
+
     private function logEvent(
         int $tenantId,
         int $userId,
-        int $requestId,
+        ?int $requestId,
         string $eventType,
         string $eventDescription,
         string $action,
         string $result,
-        array $metadata = []
+        array $metadata = [],
+        string $subjectType = 'agent_request',
+        ?int $subjectId = null
     ): void
     {
         $sql = "
@@ -79,7 +104,7 @@ final class AgentAuditLogger
                 :event_description,
                 :action,
                 :result,
-                'agent_request',
+                :subject_type,
                 :subject_id,
                 :metadata,
                 :ip_address,
@@ -96,7 +121,8 @@ final class AgentAuditLogger
             'event_description' => $eventDescription,
             'action' => $action,
             'result' => $result,
-            'subject_id' => $requestId,
+            'subject_type' => $subjectType,
+            'subject_id' => $subjectId ?? $requestId,
             'metadata' => json_encode($metadata, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}',
             'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,

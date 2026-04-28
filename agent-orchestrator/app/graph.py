@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from typing import Literal
 
 from langgraph.graph import END, StateGraph
@@ -93,6 +95,12 @@ class AgentOrchestratorGraph:
         missing = ontology.get("missing_fields")
         state["missing_fields"] = missing if isinstance(missing, list) else []
         if state["missing_fields"]:
+            if self.is_resolvable_by_php_agent(state["missing_fields"], state["effective_message_text"]):
+                # Ontology can detect gaps, but PHP AgentService is the final authority
+                # for aliases/defaults such as "caja principal" or default finance accounts.
+                state["route"] = "check_requires_confirmation"
+                return state
+
             state["status"] = "waiting_for_input"
             state["route"] = "ask_for_missing_fields"
             memory = self.memory_store.get(state["tenant_id"], state["user_id"], state.get("conversation_id"))
@@ -135,8 +143,23 @@ class AgentOrchestratorGraph:
             state.get("conversation_id"),
             state["effective_message_text"],
         )
+        php_result = state.get("php_result") or {}
+        tool_result = php_result.get("tool") if isinstance(php_result.get("tool"), dict) else {}
+        output = tool_result.get("output") if isinstance(tool_result.get("output"), dict) else {}
+        php_missing_fields = output.get("missing_fields") if isinstance(output.get("missing_fields"), list) else []
+
+        state["response_text"] = str(php_result.get("response_text") or "")
+
+        if tool_result.get("status") == "failed" and php_missing_fields:
+            state["status"] = "waiting_for_input"
+            state["missing_fields"] = [str(field) for field in php_missing_fields]
+            memory = self.memory_store.get(state["tenant_id"], state["user_id"], state.get("conversation_id"))
+            memory.pending_message_text = state["effective_message_text"]
+            memory.pending_missing_fields = state["missing_fields"]
+            return state
+
         state["status"] = "completed"
-        state["response_text"] = str((state.get("php_result") or {}).get("response_text") or "")
+        state["missing_fields"] = []
         self.memory_store.clear_pending(state["tenant_id"], state["user_id"], state.get("conversation_id"))
         return state
 
@@ -163,3 +186,119 @@ class AgentOrchestratorGraph:
         if state.get("route") == "execute_tool_via_php_agent":
             return "execute_tool_via_php_agent"
         return "compose_response"
+
+    def is_resolvable_by_php_agent(self, missing_fields: list[str], input_text: str) -> bool:
+        text = self._normalize_text(input_text)
+
+        for field in missing_fields:
+            normalized_field = self._normalize_text(str(field))
+
+            if normalized_field in {"monto", "amount"} and not self._has_amount(text):
+                return False
+
+            if normalized_field in {"cuenta_id", "cuenta", "account_id"} and not self._has_account_reference(text):
+                return False
+
+            if normalized_field in {"persona_id", "persona", "person_id"} and not self._has_person_reference(text):
+                return False
+
+            if normalized_field in {"fecha", "fecha_inicio", "fecha_fin", "fecha_hora", "date", "datetime"} and not self._has_time_reference(text):
+                return False
+
+            known_resolvable = {
+                "categoria_id",
+                "subtipo",
+                "tipo",
+                "medio_pago",
+                "titulo",
+                "detalle",
+                "descripcion",
+            }
+            if normalized_field not in known_resolvable and normalized_field not in {
+                "monto",
+                "amount",
+                "cuenta_id",
+                "cuenta",
+                "account_id",
+                "persona_id",
+                "persona",
+                "person_id",
+                "fecha",
+                "fecha_inicio",
+                "fecha_fin",
+                "fecha_hora",
+                "date",
+                "datetime",
+            }:
+                return False
+
+        return True
+
+    def _normalize_text(self, value: str) -> str:
+        normalized = unicodedata.normalize("NFD", value.lower())
+        without_accents = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+        return re.sub(r"\s+", " ", without_accents).strip()
+
+    def _has_amount(self, text: str) -> bool:
+        return re.search(r"\b\d+(?:[.,]\d+)?\b", text) is not None
+
+    def _has_account_reference(self, text: str) -> bool:
+        account_words = {
+            "caja",
+            "caja principal",
+            "banco",
+            "cuenta",
+            "cuenta corriente",
+            "corriente",
+            "efectivo",
+            "transferencia",
+            "principal",
+        }
+        return any(word in text for word in account_words)
+
+    def _has_person_reference(self, text: str) -> bool:
+        if re.search(r"\bpersona\s+\d+\b", text):
+            return True
+
+        if re.search(r"\bbuscar\s+persona\s+[a-z][a-z\s]{1,50}\b", text):
+            return True
+
+        stop_words = {
+            "ofrenda",
+            "diezmo",
+            "donacion",
+            "ingreso",
+            "egreso",
+            "gasto",
+            "caja",
+            "caja principal",
+            "banco",
+            "abril",
+            "hoy",
+            "manana",
+            "las",
+            "llamar",
+            "recordar",
+            "recuerdame",
+        }
+        for match in re.finditer(r"\b(?:para|de|a)\s+([a-z]+(?:\s+[a-z]+){0,3})\b", text):
+            words = [word for word in match.group(1).split() if word not in stop_words]
+            if words:
+                return True
+
+        return False
+
+    def _has_time_reference(self, text: str) -> bool:
+        month_names = (
+            "enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+            "septiembre|setiembre|octubre|noviembre|diciembre"
+        )
+        temporal_patterns = [
+            r"\b(hoy|manana|ayer|pasado manana|esta semana|proxima semana|este mes|proximo mes)\b",
+            rf"\b({month_names})\b",
+            r"\b\d{4}-\d{2}-\d{2}\b",
+            r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b",
+            r"\b\d{1,2}:\d{2}\b",
+            r"\ba las \d{1,2}\b",
+        ]
+        return any(re.search(pattern, text) for pattern in temporal_patterns)

@@ -4,6 +4,8 @@ Orquestador externo inicial para FeActiva Iglesia SaaS.
 
 Este servicio usa FastAPI + LangGraph para manejar conversaciones multi-step, memoria corta, datos faltantes y confirmaciones. No ejecuta SQL, no accede a MySQL y no inventa herramientas: solo llama endpoints internos del SaaS protegidos por `X-Integration-Key`.
 
+Ontology/orchestrator puede detectar campos faltantes como senal temprana, pero PHP AgentService es la autoridad final para resolver aliases y defaults antes de decidir si debe pedir datos al usuario.
+
 ## Endpoints
 
 ```http
