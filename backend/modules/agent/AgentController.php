@@ -15,7 +15,9 @@ final class AgentController
             $repository,
             new AgentIntentRouter(),
             new AgentResponseComposer(),
-            new AgentAuditLogger()
+            new AgentAuditLogger(),
+            new AgentToolRegistry(),
+            new PermissionRepository()
         );
     }
 

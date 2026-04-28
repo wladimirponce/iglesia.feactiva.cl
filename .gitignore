@@ -1,4 +1,6 @@
 .env
+.env.docker
+.env.compose
 logs/
 storage/
 *.log

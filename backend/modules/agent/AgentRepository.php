@@ -23,7 +23,7 @@ final class AgentRepository
         }
     }
 
-    public function createRequest(int $tenantId, int $userId, string $source, string $inputText): int
+    public function createRequest(int $tenantId, int $userId, string $source, string $inputText, ?int $conversationId = null): int
     {
         $payload = [
             'source' => $source,
@@ -33,6 +33,7 @@ final class AgentRepository
         $sql = "
             INSERT INTO agent_requests (
                 tenant_id,
+                conversation_id,
                 user_id,
                 source,
                 request_type,
@@ -41,6 +42,7 @@ final class AgentRepository
                 status
             ) VALUES (
                 :tenant_id,
+                :conversation_id,
                 :user_id,
                 :source,
                 'agent.request',
@@ -53,6 +55,7 @@ final class AgentRepository
         $statement = Database::connection()->prepare($sql);
         $statement->execute([
             'tenant_id' => $tenantId,
+            'conversation_id' => $conversationId,
             'user_id' => $userId,
             'source' => $source,
             'input_payload' => $this->json($payload),
@@ -112,6 +115,74 @@ final class AgentRepository
             'request_id' => $requestId,
             'output_payload' => $this->json($payload),
             'response_text' => $responseText,
+        ]);
+
+        return (int) Database::connection()->lastInsertId();
+    }
+
+    public function createAction(
+        int $tenantId,
+        int $requestId,
+        int $userId,
+        string $actionName,
+        string $moduleCode,
+        array $input,
+        array $output,
+        string $status,
+        ?string $targetTable = null,
+        ?int $targetId = null
+    ): int {
+        $sql = "
+            INSERT INTO agent_actions (
+                tenant_id,
+                request_id,
+                actor_user_id,
+                action_code,
+                action_name,
+                module_code,
+                target_table,
+                target_id,
+                input_payload,
+                input_json,
+                result_payload,
+                output_json,
+                status,
+                executed_at
+            ) VALUES (
+                :tenant_id,
+                :request_id,
+                :actor_user_id,
+                :action_code,
+                :action_name,
+                :module_code,
+                :target_table,
+                :target_id,
+                :input_payload,
+                :input_json,
+                :result_payload,
+                :output_json,
+                :status,
+                UTC_TIMESTAMP()
+            )
+        ";
+
+        $inputJson = $this->json($input);
+        $outputJson = $this->json($output);
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute([
+            'tenant_id' => $tenantId,
+            'request_id' => $requestId,
+            'actor_user_id' => $userId,
+            'action_code' => $actionName,
+            'action_name' => $actionName,
+            'module_code' => $moduleCode,
+            'target_table' => $targetTable,
+            'target_id' => $targetId,
+            'input_payload' => $inputJson,
+            'input_json' => $inputJson,
+            'result_payload' => $outputJson,
+            'output_json' => $outputJson,
+            'status' => $status,
         ]);
 
         return (int) Database::connection()->lastInsertId();

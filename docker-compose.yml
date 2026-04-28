@@ -12,9 +12,6 @@ services:
       DB_DRIVER: mysql
       DB_HOST: db
       DB_PORT: 3306
-      DB_NAME: feactiva_iglesia_saas
-      DB_USER: feactiva
-      DB_PASS: feactiva
       DB_CHARSET: utf8mb4
       DB_COLLATION: utf8mb4_unicode_ci
       SESSION_SECURE: "false"
@@ -40,11 +37,10 @@ services:
 
   db:
     image: mariadb:11.4
+    env_file:
+      - .env.docker
     environment:
       MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: feactiva_iglesia_saas
-      MARIADB_USER: feactiva
-      MARIADB_PASSWORD: feactiva
     ports:
       - "3307:3306"
     volumes:

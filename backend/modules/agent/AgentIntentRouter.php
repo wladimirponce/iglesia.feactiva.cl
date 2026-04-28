@@ -16,12 +16,12 @@ final class AgentIntentRouter
             return 'consulta_finanzas';
         }
 
-        if (preg_match('/\b(persona|personas|miembro|miembros|visita|visitas|familia|familias|crm)\b/u', $text) === 1) {
-            return 'consulta_crm';
-        }
-
         if (preg_match('/\b(oracion|oración|orar|peticion|petición|intercede|intercesion|intercesión)\b/u', $text) === 1) {
             return 'oracion';
+        }
+
+        if (preg_match('/\b(persona|personas|miembro|miembros|visita|visitas|familia|familias|crm)\b/u', $text) === 1) {
+            return 'consulta_crm';
         }
 
         return 'desconocido';

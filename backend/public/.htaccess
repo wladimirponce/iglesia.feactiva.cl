@@ -11,6 +11,7 @@
 
     # Endpoint interno server-to-server: ejecutar archivo directo.
     RewriteRule ^internal/whatsapp/identify\.php$ - [L]
+    RewriteRule ^internal/whatsapp/message\.php$ - [L]
 
     # Redirigir todo a index.php si el archivo/carpeta no existe
     RewriteCond %{REQUEST_FILENAME} !-d

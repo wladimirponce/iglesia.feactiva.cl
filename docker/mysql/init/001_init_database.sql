@@ -12,5 +12,8 @@ SOURCE /schema/seeds/007_dev_finanzas_permissions_seed.sql;
 SOURCE /schema/migrations/004_contabilidad_formal.sql;
 SOURCE /schema/seeds/008_contabilidad_seed.sql;
 SOURCE /schema/seeds/009_dev_contabilidad_permissions_seed.sql;
+SOURCE /schema/migrations/005_discipulado_pastoral.sql;
+SOURCE /schema/seeds/010_dev_discipulado_pastoral_permissions_seed.sql;
 SOURCE /schema/migrations/006_whatsapp_agent_base.sql;
 SOURCE /schema/migrations/007_agent_core.sql;
+SOURCE /schema/migrations/008_agent_tools.sql;
