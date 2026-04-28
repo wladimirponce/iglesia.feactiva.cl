@@ -17,3 +17,4 @@ SOURCE /schema/seeds/010_dev_discipulado_pastoral_permissions_seed.sql;
 SOURCE /schema/migrations/006_whatsapp_agent_base.sql;
 SOURCE /schema/migrations/007_agent_core.sql;
 SOURCE /schema/migrations/008_agent_tools.sql;
+SOURCE /schema/migrations/009_agenda_recordatorios.sql;

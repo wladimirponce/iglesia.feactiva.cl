@@ -11,8 +11,21 @@ final class AgentToolRegistry
     {
         $this->tools = [];
         $this->register(new FinanzasGetSummaryTool());
+        $this->register(new FinanzasCreateIncomeTool());
+        $this->register(new FinanzasCreateExpenseTool());
+        $this->register(new FinanzasGetBalanceByDateTool());
+        $this->register(new CrmCreatePersonTool());
+        $this->register(new CrmUpdatePersonTool());
         $this->register(new CrmSearchPersonTool());
+        $this->register(new CrmCreateFamilyTool());
+        $this->register(new CrmAssignPersonToFamilyTool());
+        $this->register(new ContabilidadGetBalanceTool());
+        $this->register(new DiscipuladoAssignRouteTool());
+        $this->register(new DiscipuladoCompleteStageTool());
+        $this->register(new PastoralCreateCaseTool());
         $this->register(new PastoralCreatePrayerRequestTool());
+        $this->register(new ReminderCreateTool());
+        $this->register(new ReminderSearchTool());
     }
 
     public function get(string $name): ?AgentToolInterface

@@ -30,11 +30,43 @@ final class AgentResponseComposer
         }
 
         if ($status === 'failed') {
-            if (($output['reason'] ?? '') === 'missing_prayer_data') {
-                return 'Para crear la solicitud de oracion necesito al menos el ID de la persona y el detalle de la peticion.';
+            $reason = (string) ($output['reason'] ?? '');
+            $missingFields = is_array($output['missing_fields'] ?? null) ? implode(', ', $output['missing_fields']) : '';
+
+            if ($reason === 'missing_prayer_data') {
+                return 'Para crear la solicitud de oracion necesito al menos la persona y el detalle de la peticion.';
+            }
+
+            if (in_array($reason, [
+                'missing_finance_data', 'missing_person_data', 'missing_reminder_data',
+                'missing_person_update_data', 'missing_family_data', 'missing_family_assign_data',
+                'missing_discipulado_data', 'missing_stage_data', 'missing_pastoral_case_data',
+            ], true)) {
+                return 'Me faltan datos para ejecutar esa accion: ' . ($missingFields !== '' ? $missingFields : 'datos obligatorios') . '.';
             }
 
             return 'No pude ejecutar esa herramienta en este momento.';
+        }
+
+        if ($toolName === 'crm_create_person') {
+            return sprintf(
+                'Persona creada: #%d %s %s.',
+                (int) ($output['id'] ?? 0),
+                (string) ($output['nombres'] ?? ''),
+                (string) ($output['apellidos'] ?? '')
+            );
+        }
+
+        if ($toolName === 'crm_update_person') {
+            return sprintf('Persona #%d actualizada.', (int) ($output['id'] ?? 0));
+        }
+
+        if ($toolName === 'crm_create_family') {
+            return sprintf('Familia creada: #%d %s.', (int) ($output['id'] ?? 0), (string) ($output['nombre_familia'] ?? ''));
+        }
+
+        if ($toolName === 'crm_assign_person_to_family') {
+            return sprintf('Persona %d agregada a familia %d como %s.', (int) ($output['persona_id'] ?? 0), (int) ($output['familia_id'] ?? 0), (string) ($output['parentesco'] ?? 'otro'));
         }
 
         if ($toolName === 'finanzas_get_summary') {
@@ -46,6 +78,47 @@ final class AgentResponseComposer
                 number_format((float) ($output['egresos'] ?? 0), 0, ',', '.'),
                 number_format((float) ($output['saldo_neto'] ?? 0), 0, ',', '.')
             );
+        }
+
+        if ($toolName === 'finanzas_create_income') {
+            return sprintf(
+                'Ingreso registrado con ID %d por %s.',
+                (int) ($output['id'] ?? 0),
+                number_format((float) ($output['monto'] ?? 0), 0, ',', '.')
+            );
+        }
+
+        if ($toolName === 'finanzas_create_expense') {
+            return sprintf(
+                'Egreso registrado con ID %d por %s.',
+                (int) ($output['id'] ?? 0),
+                number_format((float) ($output['monto'] ?? 0), 0, ',', '.')
+            );
+        }
+
+        if ($toolName === 'finanzas_get_balance_by_date') {
+            return sprintf(
+                'Saldo total al %s: %s.',
+                (string) ($output['fecha'] ?? ''),
+                number_format((float) ($output['saldo_total'] ?? 0), 0, ',', '.')
+            );
+        }
+
+        if ($toolName === 'contabilidad_get_balance') {
+            $cuentas = is_array($output['cuentas'] ?? null) ? count($output['cuentas']) : 0;
+            return sprintf('Balance contable del %s al %s generado con %d cuentas.', (string) ($output['fecha_inicio'] ?? ''), (string) ($output['fecha_fin'] ?? ''), $cuentas);
+        }
+
+        if ($toolName === 'discipulado_assign_route') {
+            return sprintf('Ruta de discipulado %d asignada a persona %d.', (int) ($output['ruta_id'] ?? 0), (int) ($output['persona_id'] ?? 0));
+        }
+
+        if ($toolName === 'discipulado_complete_stage') {
+            return sprintf('Etapa de discipulado %d marcada como completada.', (int) ($output['persona_etapa_id'] ?? 0));
+        }
+
+        if ($toolName === 'pastoral_create_case') {
+            return sprintf('Caso pastoral creado con ID %d.', (int) ($output['id'] ?? 0));
         }
 
         if ($toolName === 'crm_search_person') {
@@ -71,6 +144,22 @@ final class AgentResponseComposer
                 (int) ($output['id'] ?? 0),
                 (int) ($output['persona_id'] ?? 0)
             );
+        }
+
+        if ($toolName === 'reminder_create') {
+            return sprintf(
+                'Recordatorio creado con ID %d para %s.',
+                (int) ($output['id'] ?? 0),
+                (string) ($output['fecha_hora'] ?? '')
+            );
+        }
+
+        if ($toolName === 'reminder_search') {
+            $items = is_array($output['recordatorios'] ?? null) ? $output['recordatorios'] : [];
+            if ($items === []) {
+                return 'No tienes recordatorios en ese periodo.';
+            }
+            return 'Tienes ' . count($items) . ' recordatorio(s) en ese periodo.';
         }
 
         return $this->compose($intent);

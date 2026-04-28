@@ -17,7 +17,8 @@ final class AgentController
             new AgentResponseComposer(),
             new AgentAuditLogger(),
             new AgentToolRegistry(),
-            new PermissionRepository()
+            new PermissionRepository(),
+            new OntologyResolver(new OntologyRegistry())
         );
     }
 

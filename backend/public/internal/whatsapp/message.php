@@ -14,10 +14,29 @@ require_once __DIR__ . '/../../../modules/agent/AgentRepository.php';
 require_once __DIR__ . '/../../../modules/agent/AgentIntentRouter.php';
 require_once __DIR__ . '/../../../modules/agent/AgentResponseComposer.php';
 require_once __DIR__ . '/../../../modules/agent/AgentAuditLogger.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyObject.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyRelation.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyAction.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyPermission.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyRegistry.php';
+require_once __DIR__ . '/../../../modules/agent/ontology/OntologyResolver.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgentToolInterface.php';
+require_once __DIR__ . '/../../../modules/agent/tools/CrmCreatePersonTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/CrmUpdatePersonTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/CrmCreateFamilyTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/CrmAssignPersonToFamilyTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/FinanzasGetSummaryTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/FinanzasCreateIncomeTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/FinanzasCreateExpenseTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/FinanzasGetBalanceByDateTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/ContabilidadGetBalanceTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/DiscipuladoAssignRouteTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/DiscipuladoCompleteStageTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/CrmSearchPersonTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/PastoralCreateCaseTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/PastoralCreatePrayerRequestTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/ReminderCreateTool.php';
+require_once __DIR__ . '/../../../modules/agent/tools/ReminderSearchTool.php';
 require_once __DIR__ . '/../../../modules/agent/tools/AgentToolRegistry.php';
 require_once __DIR__ . '/../../../modules/agent/AgentService.php';
 require_once __DIR__ . '/../../../middlewares/IntegrationAuthMiddleware.php';
@@ -117,7 +136,8 @@ function handleInternalWhatsAppMessage(): void
         new AgentResponseComposer(),
         new AgentAuditLogger(),
         new AgentToolRegistry(),
-        new PermissionRepository()
+        new PermissionRepository(),
+        new OntologyResolver(new OntologyRegistry())
     );
     $agentResult = $agentService->createRequest($tenantId, $userId, 'whatsapp', $messageText, $conversationId);
     $responseText = (string) ($agentResult['response']['text'] ?? '');
