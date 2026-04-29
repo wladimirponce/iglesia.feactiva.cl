@@ -7,7 +7,7 @@ final class WhatsAppSender
     public static function send(string $to, string $text): bool
     {
         $accessToken   = $_ENV['WHATSAPP_INTEGRATION_KEY'] ?? '';
-        $phoneNumberId = $_ENV['WHATSAPP_PHONE_NUMBER_ID'] ?? '';
+        $phoneNumberId = $_ENV['WA_PHONE_NUMBER_ID'] ?? $_ENV['WHATSAPP_PHONE_NUMBER_ID'] ?? '';
 
         if ($accessToken === '' || $phoneNumberId === '') {
             error_log('WhatsAppSender: missing WHATSAPP_INTEGRATION_KEY or WHATSAPP_PHONE_NUMBER_ID');
