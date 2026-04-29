@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../config/env.php';
 require_once __DIR__ . '/../../../core/Response.php';
 require_once __DIR__ . '/../../../core/Database.php';
 require_once __DIR__ . '/../../../helpers/PhoneNormalizer.php';
+require_once __DIR__ . '/../../../helpers/WhatsAppSender.php';
 require_once __DIR__ . '/../../../modules/auth/PermissionRepository.php';
 require_once __DIR__ . '/../../../modules/integrations/whatsapp/WhatsAppIdentityValidator.php';
 require_once __DIR__ . '/../../../modules/integrations/whatsapp/WhatsAppIdentityRepository.php';
@@ -156,8 +157,8 @@ function handleInternalWhatsAppMessage(): void
         $normalizedPhone = PhoneNormalizer::toE164($phone, 'CL') ?? $phone;
         $activeState = $stateService->active($normalizedPhone);
         if ($activeState !== null) {
-            $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
-            Response::success(['found' => false, 'response_text' => $responseText, 'agent_request_id' => null]);
+            $stateResult  = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
+            Response::success(['found' => false, 'response_text' => $stateResult['text'], 'agent_request_id' => null]);
             return;
         }
         $stateService->create(null, null, $normalizedPhone, null, 'onboarding_waiting_confirmation', ['phone' => $normalizedPhone]);
@@ -216,7 +217,11 @@ function handleInternalWhatsAppMessage(): void
             $messageText = trim((string) ($state['pending_text'] ?? '') . ' ' . $messageText);
             $stateService->close($activeState, 'completed');
         } else {
-        $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
+        $stateResult = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
+        $responseText = $stateResult['text'];
+        if (!empty($stateResult['outbound_to']) && !empty($stateResult['outbound_text'])) {
+            WhatsAppSender::send((string) $stateResult['outbound_to'], (string) $stateResult['outbound_text']);
+        }
         $audioResponseUrl = internalWhatsappAudioResponseUrl($responseMode, $responseText, $tenantId, $userId, null, $conversationId);
         internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', [
             'conversation_state_id' => (int) $activeState['id'],
@@ -591,52 +596,63 @@ function internalWhatsappHandleConversationState(
     if ($stateKey === 'onboarding_waiting_confirmation') {
         if ($stateResolver->isAffirmative($messageText)) {
             $stateService->update($activeState, 'onboarding_waiting_name_email', $state);
-            return 'Claro, dame tu nombre completo y correo.';
+            return ['text' => 'Claro, dame tu nombre completo y correo.'];
         }
         if ($stateResolver->isNegative($messageText)) {
             $stateService->close($activeState, 'cancelled');
-            return 'Entendido. Si necesitas registrarte mas adelante, escribeme nuevamente.';
+            return ['text' => 'Entendido. Si necesitas registrarte mas adelante, escribeme nuevamente.'];
         }
-        return '¿Quieres registrarte? Responde si o no.';
+        return ['text' => '¿Quieres registrarte? Responde si o no.'];
     }
 
     if ($stateKey === 'onboarding_waiting_name_email') {
         $data = $stateResolver->extractNameEmail($messageText);
         if ($data === null) {
-            return 'Necesito tu nombre completo y un correo valido.';
+            return ['text' => 'Necesito tu nombre completo y un correo valido.'];
         }
         $tenantId = (int) env('DEFAULT_TENANT_ID', '1');
         internalWhatsappCreateBasicUserAndPerson($tenantId, (string) $state['phone'], $data['name'], $data['email']);
         $stateService->close($activeState, 'completed');
-        return 'Listo, ya quedaste registrado.';
+        return ['text' => 'Listo, ya quedaste registrado.'];
     }
 
     if ($stateKey === 'whatsapp_draft_waiting_confirmation') {
         $draftId = (int) ($state['draft_id'] ?? 0);
         if ($stateResolver->wantsImproveAndSend($messageText)) {
+            $draft    = $draftService->find($draftId);
             $improved = $draftService->improve($draftId);
             $draftService->approveAndMarkSent($draftId);
             $stateService->close($activeState, 'completed');
-            return 'Mejore y envie: ' . $improved . ' ¿Necesitas algo mas?';
+            return [
+                'text'          => 'Mejore y envie: ' . $improved . ' ¿Necesitas algo mas?',
+                'outbound_to'   => $draft['recipient_phone'] ?? null,
+                'outbound_text' => $improved,
+            ];
         }
         if ($stateResolver->wantsImprove($messageText)) {
             $improved = $draftService->improve($draftId);
-            return 'Te propongo: ' . $improved . ' ¿Lo envio?';
+            return ['text' => 'Te propongo: ' . $improved . ' ¿Lo envio?'];
         }
         if ($stateResolver->isNegative($messageText)) {
             $draftService->cancel($draftId);
             $stateService->close($activeState, 'cancelled');
-            return 'Perfecto, cancele el envio.';
+            return ['text' => 'Perfecto, cancele el envio.'];
         }
         if ($stateResolver->isAffirmative($messageText)) {
+            $draft = $draftService->find($draftId);
+            $draftText = (string) (($draft['improved_text'] ?? null) ?: ($draft['draft_text'] ?? ''));
             $draftService->approveAndMarkSent($draftId);
             $stateService->close($activeState, 'completed');
-            return 'Enviado. ¿Necesitas algo mas?';
+            return [
+                'text'          => 'Enviado. ¿Necesitas algo mas?',
+                'outbound_to'   => $draft['recipient_phone'] ?? null,
+                'outbound_text' => $draftText,
+            ];
         }
-        return '¿Lo envio, lo mejoro o lo cancelo?';
+        return ['text' => '¿Lo envio, lo mejoro o lo cancelo?'];
     }
 
-    return 'Tengo una conversacion pendiente, pero no pude procesarla. Escribe cancelar para cerrarla.';
+    return ['text' => 'Tengo una conversacion pendiente, pero no pude procesarla. Escribe cancelar para cerrarla.'];
 }
 
 function internalWhatsappCreateBasicUserAndPerson(int $tenantId, string $phone, string $name, string $email): void
