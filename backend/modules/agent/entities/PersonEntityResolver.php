@@ -47,18 +47,25 @@ final class PersonEntityResolver
             WHERE tenant_id = :tenant_id
               AND deleted_at IS NULL
               AND (
-                CONCAT(nombres, ' ', apellidos) {$operator} :query
-                OR nombre_preferido {$operator} :query
-                OR email {$operator} :query
-                OR telefono {$operator} :query
-                OR whatsapp {$operator} :query
+                CONCAT(nombres, ' ', apellidos) {$operator} :query_full_name
+                OR nombre_preferido {$operator} :query_preferred_name
+                OR email {$operator} :query_email
+                OR telefono {$operator} :query_phone
+                OR whatsapp {$operator} :query_whatsapp
               )
             ORDER BY id ASC
             LIMIT 6
         ";
 
         $statement = Database::connection()->prepare($sql);
-        $statement->execute(['tenant_id' => $tenantId, 'query' => $value]);
+        $statement->execute([
+            'tenant_id' => $tenantId,
+            'query_full_name' => $value,
+            'query_preferred_name' => $value,
+            'query_email' => $value,
+            'query_phone' => $value,
+            'query_whatsapp' => $value,
+        ]);
         return $statement->fetchAll();
     }
 

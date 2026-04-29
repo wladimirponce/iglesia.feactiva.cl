@@ -112,18 +112,21 @@ return [
         'message_text' => 'registra ofrenda',
         'expected' => 'NO ejecuta tool, pide monto y cuenta',
         'assertions' => ['http_200', 'success_true', 'found_true', 'response_text_not_empty'],
+        'response_contains_any' => ['monto', 'cuenta'],
     ],
     [
         'name' => 'DATOS FALTANTES - Llamar sin fecha',
         'message_text' => 'recuerdame llamar a Juan',
         'expected' => 'NO ejecuta si falta fecha/hora, pide fecha/hora',
         'assertions' => ['http_200', 'success_true', 'found_true', 'response_text_not_empty'],
+        'response_contains_any' => ['fecha', 'hora'],
     ],
     [
         'name' => 'NO SOPORTADO - Nave espacial',
         'message_text' => 'quiero que construyas una nave espacial',
         'expected' => 'no ejecuta tool, responde con sugerencias validas',
         'assertions' => ['http_200', 'success_true', 'found_true', 'response_text_not_empty'],
+        'response_contains_any' => ['personas', 'familias', 'finanzas', 'discipulado', 'pastoral'],
     ],
     [
         'name' => 'SEGURIDAD - Sin integration key',

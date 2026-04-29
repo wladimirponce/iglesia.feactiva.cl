@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/backend/config/env.php';
+require_once dirname(__DIR__, 2) . '/backend/core/Database.php';
 
 $cases = require __DIR__ . '/agent_secretary_test_cases.php';
 
@@ -33,6 +34,11 @@ foreach ($cases as $case) {
         continue;
     }
 
+    $cleanupObservation = null;
+    if (($case['auth'] ?? 'valid') === 'valid' && $phone !== '') {
+        $cleanupObservation = clearConversationState($phone);
+    }
+
     $payload = [
         'phone' => $phone,
         'message_text' => (string) ($case['message_text'] ?? ''),
@@ -54,6 +60,13 @@ foreach ($cases as $case) {
     $decoded = json_decode($http['body'], true);
     $decoded = is_array($decoded) ? $decoded : null;
     $assertion = evaluateAssertions($case['assertions'] ?? [], $http['status'], $decoded);
+    $keywordAssertion = evaluateResponseKeywords($case['response_contains_any'] ?? [], $decoded);
+    if ($assertion['result'] === 'PASS' && $keywordAssertion['result'] === 'FAIL') {
+        $assertion = $keywordAssertion;
+    }
+    if ($cleanupObservation !== null) {
+        $assertion['observation'] .= ' ' . $cleanupObservation;
+    }
 
     $results[] = [
         'number' => $sequence++,
@@ -69,6 +82,47 @@ foreach ($cases as $case) {
         'observation' => $assertion['observation'],
         'response_json' => sanitizeResponse($decoded, $http['body']),
     ];
+}
+
+function clearConversationState(string $phone): ?string
+{
+    $digits = preg_replace('/\D+/', '', $phone);
+    if (!is_string($digits) || $digits === '') {
+        return null;
+    }
+
+    $variants = array_values(array_unique(array_filter([
+        $phone,
+        $digits,
+        '+' . $digits,
+        strlen($digits) > 9 ? substr($digits, -9) : null,
+    ])));
+
+    $placeholders = [];
+    $params = [];
+    foreach ($variants as $index => $variant) {
+        $key = 'phone_' . $index;
+        $placeholders[] = ':' . $key;
+        $params[$key] = $variant;
+    }
+
+    try {
+        $sql = "
+            UPDATE agent_conversation_state
+            SET status = 'cancelled',
+                updated_at = NOW()
+            WHERE status = 'active'
+              AND deleted_at IS NULL
+              AND phone IN (" . implode(', ', $placeholders) . ")
+        ";
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute($params);
+        $count = $statement->rowCount();
+
+        return $count > 0 ? "Estados conversacionales activos cancelados antes del caso: {$count}." : null;
+    } catch (Throwable $exception) {
+        return 'No se pudo limpiar estado conversacional: ' . $exception->getMessage();
+    }
 }
 
 $reportPath = writeReport($results, $baseUrl, $testPhone, $environment);
@@ -145,6 +199,25 @@ function isIntegrationUnauthorized(?array $response): bool
     return str_contains($code, 'INTEGRATION_UNAUTHORIZED')
         || str_contains($message, 'Integracion no autorizada')
         || str_contains((string) $encodedDetails, 'INTEGRATION_UNAUTHORIZED');
+}
+
+function evaluateResponseKeywords(array $keywords, ?array $response): array
+{
+    if ($keywords === []) {
+        return ['result' => 'PASS', 'observation' => 'Condiciones esperadas cumplidas.'];
+    }
+
+    $responseText = strtolower((string) ($response['data']['response_text'] ?? ''));
+    foreach ($keywords as $keyword) {
+        if (str_contains($responseText, strtolower((string) $keyword))) {
+            return ['result' => 'PASS', 'observation' => 'Condiciones esperadas cumplidas.'];
+        }
+    }
+
+    return [
+        'result' => 'FAIL',
+        'observation' => 'La respuesta no contiene ninguna palabra esperada: ' . implode(', ', $keywords),
+    ];
 }
 
 function skippedResult(int $number, array $case, string $reason): array

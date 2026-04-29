@@ -46,7 +46,7 @@ final class FinancialCategoryEntityResolver
               AND tipo = :tipo
               AND deleted_at IS NULL
               AND es_activa = 1
-              AND (nombre {$operator} :query OR codigo {$operator} :query)
+              AND (nombre {$operator} :query_nombre OR codigo {$operator} :query_codigo)
             ORDER BY orden ASC, id ASC
             LIMIT 6
         ";
@@ -55,7 +55,8 @@ final class FinancialCategoryEntityResolver
         $statement->execute([
             'tenant_id' => $tenantId,
             'tipo' => $tipo,
-            'query' => $value,
+            'query_nombre' => $value,
+            'query_codigo' => $value,
         ]);
         return $statement->fetchAll();
     }

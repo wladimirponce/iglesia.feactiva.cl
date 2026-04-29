@@ -49,13 +49,17 @@ final class FinancialAccountEntityResolver
             WHERE tenant_id = :tenant_id
               AND deleted_at IS NULL
               AND es_activa = 1
-              AND (nombre {$operator} :query OR banco {$operator} :query{$typeCondition})
+              AND (nombre {$operator} :query_nombre OR banco {$operator} :query_banco{$typeCondition})
             ORDER BY es_principal DESC, id ASC
             LIMIT 6
         ";
 
         $statement = Database::connection()->prepare($sql);
-        $params = ['tenant_id' => $tenantId, 'query' => $value];
+        $params = [
+            'tenant_id' => $tenantId,
+            'query_nombre' => $value,
+            'query_banco' => $value,
+        ];
         if ($canMatchType) {
             $params['query_tipo'] = $normalizedQuery;
         }
