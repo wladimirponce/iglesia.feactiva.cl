@@ -226,6 +226,7 @@ function handleInternalWhatsAppMessage(): void
     $conversationId = internalWhatsappFindOrCreateConversation($tenantId, $userId, $phone, $normalizedPhone);
     $transcriptionText = null;
     $transcriptionStatus = null;
+    $transcriptionDebug = null;
     $responseMode = 'text';
     if ($messageType === 'audio') {
         internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.received', 'success', [
@@ -243,6 +244,16 @@ function handleInternalWhatsAppMessage(): void
         }
         $messageText = $transcriptionText;
         $responseMode = 'audio';
+        $transcriptionDebug = [
+            'status' => $transcriptionStatus,
+            'provider' => $transcription['provider'] ?? null,
+            'model' => $transcription['model'] ?? null,
+            'simulated' => $transcription['simulated'] ?? false,
+            'fallback_used' => $transcription['fallback_used'] ?? false,
+            'fallback_reason' => $transcription['fallback_reason'] ?? null,
+            'error' => $transcription['error'] ?? null,
+            'transcription_length' => strlen($transcriptionText),
+        ];
         internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.transcribed', $transcriptionStatus === 'completed' ? 'success' : 'failed', [
             'conversation_id' => $conversationId,
             'simulated' => $transcription['simulated'] ?? false,
@@ -278,6 +289,7 @@ function handleInternalWhatsAppMessage(): void
             'response_text' => $responseText,
             'response_mode' => $responseMode,
             'audio_url' => $audioResponseUrl,
+            'transcription' => $transcriptionDebug,
             'agent_request_id' => null,
         ]);
         return;
@@ -307,6 +319,7 @@ function handleInternalWhatsAppMessage(): void
             'response_text' => $responseText,
             'response_mode' => $responseMode,
             'audio_url' => $audioResponseUrl,
+            'transcription' => $transcriptionDebug,
             'agent_request_id' => null,
         ]);
         return;
@@ -326,6 +339,7 @@ function handleInternalWhatsAppMessage(): void
             'media_url' => $mediaUrl,
             'transcription_text' => $transcriptionText,
             'transcription_status' => $transcriptionStatus,
+            'transcription_debug' => $transcriptionDebug,
             'response_mode' => $responseMode,
         ]
     );
@@ -393,6 +407,7 @@ function handleInternalWhatsAppMessage(): void
         'response_text' => $responseText,
         'response_mode' => $responseMode,
         'audio_url' => $audioResponseUrl,
+        'transcription' => $transcriptionDebug,
         'agent_request_id' => $agentRequestId,
     ]);
 }
