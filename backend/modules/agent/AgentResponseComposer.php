@@ -195,11 +195,23 @@ final class AgentResponseComposer
         }
 
         if ($toolName === 'agenda_create_item') {
-            return sprintf(
+            $response = sprintf(
                 'Listo, agende %s para %s.',
                 (string) ($output['titulo'] ?? 'el item'),
                 (string) ($output['fecha_inicio'] ?? '')
             );
+
+            $calendar = is_array($output['google_calendar'] ?? null) ? $output['google_calendar'] : null;
+            if ($calendar !== null && ($calendar['connected'] ?? true) === false) {
+                $authUrl = (string) ($calendar['auth_url'] ?? '');
+                if ($authUrl !== '') {
+                    return $response . ' Para sincronizarlo con Google Calendar, conecta tu cuenta aqui: ' . $authUrl;
+                }
+
+                return $response . ' Para sincronizarlo con Google Calendar, falta configurar la conexion OAuth de Google.';
+            }
+
+            return $response;
         }
 
         if ($toolName === 'agenda_get_day_schedule') {

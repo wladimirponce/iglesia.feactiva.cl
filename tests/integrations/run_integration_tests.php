@@ -15,6 +15,9 @@ require_once dirname(__DIR__, 2) . '/backend/modules/integrations/adapters/Email
 require_once dirname(__DIR__, 2) . '/backend/modules/integrations/adapters/WhatsAppSenderStub.php';
 require_once dirname(__DIR__, 2) . '/backend/modules/integrations/google/GoogleCalendarRepository.php';
 require_once dirname(__DIR__, 2) . '/backend/modules/integrations/google/GoogleCalendarService.php';
+require_once dirname(__DIR__, 2) . '/backend/modules/integrations/google/GoogleTokenCrypto.php';
+require_once dirname(__DIR__, 2) . '/backend/modules/integrations/google/GoogleOAuthRepository.php';
+require_once dirname(__DIR__, 2) . '/backend/modules/integrations/google/GoogleOAuthService.php';
 
 $cases = require __DIR__ . '/integration_test_cases.php';
 
@@ -63,6 +66,10 @@ function runCase(array $case, int $number, array &$context): array
 
         if (($case['type'] ?? '') === 'whatsapp_audio_http') {
             return withTiming(runWhatsAppAudioCase($case, $number), $startedAt);
+        }
+
+        if (($case['type'] ?? '') === 'agent_meeting_oauth_link') {
+            return withTiming(runAgentMeetingOAuthLinkCase($case, $number, $context), $startedAt);
         }
 
         return withTiming(runDirectCase($case, $number, $context), $startedAt);
@@ -155,6 +162,7 @@ function runDirectCase(array $case, int $number, array &$context): array
 
     $type = (string) $case['type'];
     $response = match ($type) {
+        'google_auth_link_direct' => createGoogleAuthLinkDirect($context),
         'calendar_placeholder' => createCalendarPlaceholder($context, $testEmail),
         'calendar_meeting' => createCalendarMeeting($context),
         'calendar_cancel' => cancelCalendarMeeting($context),
@@ -167,6 +175,21 @@ function runDirectCase(array $case, int $number, array &$context): array
     };
 
     $passed = ($response['success'] ?? false) === true;
+    if (($response['result'] ?? null) === 'WARN') {
+        return [
+            'number' => $number,
+            'name' => (string) $case['name'],
+            'type' => $type,
+            'http_status' => null,
+            'success' => null,
+            'expected' => (string) ($case['expected'] ?? ''),
+            'result' => 'WARN',
+            'observation' => (string) ($response['warning'] ?? 'Prueba omitida.'),
+            'input' => sanitizeRecursive($response['input'] ?? []),
+            'response_json' => sanitizeRecursive($response),
+        ];
+    }
+
     return [
         'number' => $number,
         'name' => (string) $case['name'],
@@ -181,6 +204,77 @@ function runDirectCase(array $case, int $number, array &$context): array
     ];
 }
 
+function createGoogleAuthLinkDirect(array $context): array
+{
+    try {
+        $oauth = new GoogleOAuthService(new GoogleOAuthRepository(), new GoogleTokenCrypto(), new AgendaAuditLogger());
+        $url = $oauth->connectionUrl((int) $context['tenant_id'], (int) $context['user_id'], 'calendar');
+        $decodedUrl = urldecode($url);
+
+        return [
+            'success' => str_starts_with($url, 'https://accounts.google.com/o/oauth2/v2/auth?')
+                && str_contains($decodedUrl, GoogleOAuthService::SCOPE_CALENDAR)
+                && str_contains($url, 'access_type=offline')
+                && str_contains($url, 'prompt=consent')
+                && str_contains($url, 'state='),
+            'auth_url' => $url,
+            'input' => [
+                'tenant_id' => (int) $context['tenant_id'],
+                'user_id' => (int) $context['user_id'],
+                'service' => 'calendar',
+            ],
+        ];
+    } catch (Throwable $exception) {
+        return [
+            'result' => 'WARN',
+            'warning' => 'No se pudo generar auth_url. Configura GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI y GOOGLE_TOKEN_ENCRYPTION_KEY/JWT_SECRET. Error: ' . $exception->getMessage(),
+        ];
+    }
+}
+
+function runAgentMeetingOAuthLinkCase(array $case, int $number, array $context): array
+{
+    global $baseUrl, $whatsAppPhone, $integrationKey;
+
+    if ($whatsAppPhone === '' || $integrationKey === '') {
+        return skipped($number, $case, 'TEST_WHATSAPP_PHONE o WHATSAPP_INTEGRATION_KEY no estan configurados.');
+    }
+
+    revokeGoogleOAuthForUser((int) $context['tenant_id'], (int) $context['user_id']);
+    clearConversationStateForPhone($whatsAppPhone);
+
+    $payload = [
+        'phone' => $whatsAppPhone,
+        'message_text' => 'agenda reunion QA OAuth manana a las 19',
+        'provider_message_id' => 'qa-integrations-oauth-link-' . date('YmdHis'),
+    ];
+
+    $http = request('POST', $baseUrl . '/internal/whatsapp/message.php', $payload, [
+        'X-Integration-Key: ' . $integrationKey,
+    ]);
+    $decoded = decodeJson($http['body']);
+    $base = resultFromHttp($number, $case, $http, $decoded, sanitizePayload($payload));
+    if ($base['result'] !== 'PASS') {
+        return $base;
+    }
+
+    $text = (string) ($decoded['data']['response_text'] ?? '');
+    $hasOAuthLink = str_contains($text, 'https://accounts.google.com/o/oauth2/v2/auth?');
+    $hasConfigWarning = str_contains($text, 'falta configurar la conexion OAuth de Google');
+
+    if (!$hasOAuthLink && !$hasConfigWarning) {
+        $base['result'] = 'FAIL';
+        $base['observation'] = 'La respuesta no incluyo auth_url ni aviso de configuracion OAuth faltante.';
+        return $base;
+    }
+
+    $base['observation'] = $hasOAuthLink
+        ? 'Respuesta incluye auth_url OAuth de Google.'
+        : 'Respuesta incluye aviso controlado de configuracion OAuth faltante.';
+
+    return $base;
+}
+
 function createCalendarPlaceholder(array &$context, string $email): array
 {
     $service = calendarService();
@@ -192,6 +286,51 @@ function createCalendarPlaceholder(array &$context, string $email): array
         'calendar_account_id' => $id,
         'input' => ['email' => $email],
     ];
+}
+
+function revokeGoogleOAuthForUser(int $tenantId, int $userId): void
+{
+    try {
+        (new GoogleOAuthRepository())->disconnect($tenantId, $userId);
+    } catch (Throwable) {
+        // La prueba de respuesta del agente no debe fallar por limpieza previa.
+    }
+}
+
+function clearConversationStateForPhone(string $phone): void
+{
+    $digits = preg_replace('/\D+/', '', $phone);
+    if (!is_string($digits) || $digits === '') {
+        return;
+    }
+
+    $variants = array_values(array_unique(array_filter([
+        $phone,
+        $digits,
+        '+' . $digits,
+        strlen($digits) > 9 ? substr($digits, -9) : null,
+    ])));
+    $placeholders = [];
+    $params = [];
+    foreach ($variants as $index => $variant) {
+        $key = 'phone_' . $index;
+        $placeholders[] = ':' . $key;
+        $params[$key] = $variant;
+    }
+
+    try {
+        $statement = Database::connection()->prepare("
+            UPDATE agent_conversation_state
+            SET status = 'cancelled',
+                updated_at = NOW()
+            WHERE status = 'active'
+              AND deleted_at IS NULL
+              AND phone IN (" . implode(', ', $placeholders) . ")
+        ");
+        $statement->execute($params);
+    } catch (Throwable) {
+        // Limpieza defensiva para aislar la prueba.
+    }
 }
 
 function createCalendarMeeting(array &$context): array

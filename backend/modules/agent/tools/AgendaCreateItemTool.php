@@ -17,6 +17,26 @@ final class AgendaCreateItemTool implements AgentToolInterface
         }
         $service = new AgendaService(new AgendaRepository(), new AgendaAuditLogger());
         $id = $service->create($tenantId, $userId, $input + ['modulo_origen' => 'agent']);
-        return $service->show($tenantId, $id);
+        $item = $service->show($tenantId, $id);
+
+        if (($item['tipo'] ?? '') === 'meeting' && class_exists('GoogleOAuthService')) {
+            $oauth = new GoogleOAuthService(new GoogleOAuthRepository(), new GoogleTokenCrypto(), new AgendaAuditLogger());
+            if (!$oauth->hasScope($tenantId, $userId, GoogleOAuthService::SCOPE_CALENDAR)) {
+                try {
+                    $item['google_calendar'] = [
+                        'connected' => false,
+                        'auth_url' => $oauth->connectionUrl($tenantId, $userId, 'calendar'),
+                    ];
+                } catch (Throwable $throwable) {
+                    $item['google_calendar'] = [
+                        'connected' => false,
+                        'auth_url' => null,
+                        'error' => $throwable->getMessage(),
+                    ];
+                }
+            }
+        }
+
+        return $item;
     }
 }

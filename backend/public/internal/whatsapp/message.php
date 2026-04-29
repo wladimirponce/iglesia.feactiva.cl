@@ -28,6 +28,9 @@ require_once __DIR__ . '/../../../modules/integrations/adapters/SpeechToTextStub
 require_once __DIR__ . '/../../../modules/integrations/adapters/TextToSpeechStub.php';
 require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarRepository.php';
 require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarService.php';
+require_once __DIR__ . '/../../../modules/integrations/google/GoogleTokenCrypto.php';
+require_once __DIR__ . '/../../../modules/integrations/google/GoogleOAuthRepository.php';
+require_once __DIR__ . '/../../../modules/integrations/google/GoogleOAuthService.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaAuditLogger.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaValidator.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaRepository.php';

@@ -73,6 +73,18 @@ return [
         'assertions' => ['http_200', 'success_true'],
     ],
     [
+        'name' => 'GOOGLE OAUTH - Link directo Calendar',
+        'type' => 'google_auth_link_direct',
+        'expected' => 'Genera auth_url OAuth Calendar firmado si GOOGLE_CLIENT_ID/GOOGLE_REDIRECT_URI/secret estan configurados.',
+        'assertions' => ['direct_success'],
+    ],
+    [
+        'name' => 'AGENTE AGENDA - Reunion sin Calendar conectado devuelve link OAuth',
+        'type' => 'agent_meeting_oauth_link',
+        'expected' => 'Al agendar reunion por WhatsApp sin Google conectado, la respuesta incluye link OAuth o aviso de configuracion faltante.',
+        'assertions' => ['http_200', 'success_true'],
+    ],
+    [
         'name' => 'GOOGLE CALENDAR STUB - Cuenta placeholder',
         'type' => 'calendar_placeholder',
         'expected' => 'Crea calendar_accounts activo con provider google y auditoria.',

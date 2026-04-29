@@ -20,17 +20,6 @@ final class GoogleOAuthService
     public function authUrl(int $tenantId, int $userId, string $service): array
     {
         $scopes = $this->scopesFor($service);
-        $state = $this->buildState($tenantId, $userId, $service, $scopes);
-        $params = [
-            'client_id' => $this->clientId(),
-            'redirect_uri' => $this->redirectUri(),
-            'response_type' => 'code',
-            'scope' => implode(' ', $scopes),
-            'access_type' => 'offline',
-            'prompt' => 'consent',
-            'include_granted_scopes' => 'true',
-            'state' => $state,
-        ];
 
         $this->auditLogger->log($tenantId, $userId, null, 'google.oauth.auth_url_generated', [], [
             'service' => $service,
@@ -38,11 +27,24 @@ final class GoogleOAuthService
         ]);
 
         return [
-            'auth_url' => self::AUTH_URL . '?' . http_build_query($params),
+            'auth_url' => $this->buildAuthUrl($tenantId, $userId, $service, $scopes),
             'service' => $service,
             'scopes' => $scopes,
             'expires_in_seconds' => 600,
         ];
+    }
+
+    public function connectionUrl(int $tenantId, int $userId, string $service = 'both'): string
+    {
+        return $this->buildAuthUrl($tenantId, $userId, $service, $this->scopesFor($service));
+    }
+
+    public function hasScope(int $tenantId, int $userId, string $scope): bool
+    {
+        $status = $this->repository->status($tenantId, $userId);
+        $scopes = is_array($status['scopes'] ?? null) ? $status['scopes'] : [];
+
+        return ($status['connected'] ?? false) === true && in_array($scope, $scopes, true);
     }
 
     public function callback(string $code, string $state): array
@@ -130,6 +132,22 @@ final class GoogleOAuthService
         $payloadEncoded = $this->base64UrlEncode(json_encode($payload, JSON_UNESCAPED_SLASHES) ?: '{}');
         $signature = hash_hmac('sha256', $payloadEncoded, $this->stateSecret(), true);
         return $payloadEncoded . '.' . $this->base64UrlEncode($signature);
+    }
+
+    private function buildAuthUrl(int $tenantId, int $userId, string $service, array $scopes): string
+    {
+        $params = [
+            'client_id' => $this->clientId(),
+            'redirect_uri' => $this->redirectUri(),
+            'response_type' => 'code',
+            'scope' => implode(' ', $scopes),
+            'access_type' => 'offline',
+            'prompt' => 'consent',
+            'include_granted_scopes' => 'true',
+            'state' => $this->buildState($tenantId, $userId, $service, $scopes),
+        ];
+
+        return self::AUTH_URL . '?' . http_build_query($params);
     }
 
     private function verifyState(string $state): array
