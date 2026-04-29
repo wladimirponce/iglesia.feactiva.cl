@@ -589,7 +589,7 @@ function internalWhatsappHandleConversationState(
     ConversationStateService $stateService,
     ConversationStateResolver $stateResolver,
     OutboundDraftService $draftService
-): string {
+): array {
     $stateKey = (string) $activeState['state_key'];
     $state = is_array($activeState['state'] ?? null) ? $activeState['state'] : [];
 
