@@ -22,6 +22,14 @@ final class ConversationStateResolver
         return preg_match('/\b(mejoralo|mejorar|redactalo mejor)\b/iu', $text) === 1;
     }
 
+    // Returns true when the user wants the text improved AND sent in one step
+    // (e.g. "mejoralo y envialo") so the caller can improve + approve atomically.
+    public function wantsImproveAndSend(string $text): bool
+    {
+        $text = $this->normalizeText($text);
+        return $this->wantsImprove($text) && $this->isAffirmative($text);
+    }
+
     public function extractNameEmail(string $text): ?array
     {
         if (preg_match('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', $text, $emailMatch) !== 1) {

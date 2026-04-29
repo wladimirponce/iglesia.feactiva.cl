@@ -95,8 +95,18 @@ $middleware->handle(static function (): void {
             'message' => $throwable->getMessage(),
             'file' => $throwable->getFile(),
             'line' => $throwable->getLine(),
+            'trace' => array_slice(explode("\n", $throwable->getTraceAsString()), 0, 8),
         ]);
-        Response::error('WHATSAPP_MESSAGE_ERROR', 'No fue posible procesar el mensaje de WhatsApp.', [], 500);
+        $debug = filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $details = $debug
+            ? [
+                'exception' => get_class($throwable),
+                'message'   => $throwable->getMessage(),
+                'file'      => basename($throwable->getFile()),
+                'line'      => $throwable->getLine(),
+            ]
+            : [];
+        Response::error('WHATSAPP_MESSAGE_ERROR', 'No fue posible procesar el mensaje de WhatsApp.', $details, 500);
     }
 });
 
@@ -603,6 +613,12 @@ function internalWhatsappHandleConversationState(
 
     if ($stateKey === 'whatsapp_draft_waiting_confirmation') {
         $draftId = (int) ($state['draft_id'] ?? 0);
+        if ($stateResolver->wantsImproveAndSend($messageText)) {
+            $improved = $draftService->improve($draftId);
+            $draftService->approveAndMarkSent($draftId);
+            $stateService->close($activeState, 'completed');
+            return 'Mejore y envie: ' . $improved . ' ¿Necesitas algo mas?';
+        }
         if ($stateResolver->wantsImprove($messageText)) {
             $improved = $draftService->improve($draftId);
             return 'Te propongo: ' . $improved . ' ¿Lo envio?';

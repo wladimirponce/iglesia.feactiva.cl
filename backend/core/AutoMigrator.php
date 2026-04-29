@@ -8,38 +8,63 @@ class AutoMigrator
     {
         try {
             $pdo = Database::connection();
-            
-            // 1. Verificar si existe una tabla core (saas_tenants)
-            $stmt = $pdo->query("SHOW TABLES LIKE 'saas_tenants'");
-            if ($stmt->fetch() !== false) {
-                // Las tablas ya existen, no hacer nada.
-                return;
-            }
 
-            // 2. Si no existen, ejecutar migraciones en orden
-            $baseDir = dirname(__DIR__, 2);
+            // Bootstrap the migration tracker on first use.
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    id       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    migration VARCHAR(255) NOT NULL,
+                    run_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_schema_migrations_migration (migration)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            $ran = $pdo->query("SELECT migration FROM schema_migrations")
+                       ->fetchAll(PDO::FETCH_COLUMN);
+            $ranSet = array_flip((array) $ran);
+
+            $baseDir       = dirname(__DIR__, 2);
             $migrationsDir = $baseDir . '/database/migrations/';
-            $seedsDir = $baseDir . '/database/seeds/';
+            $seedsDir      = $baseDir . '/database/seeds/';
 
-            // Procesar Migraciones
+            $isFreshInstall = empty($ran);
+
             $files = glob($migrationsDir . '*.sql');
-            sort($files);
-            foreach ($files as $file) {
-                $sql = file_get_contents($file);
-                $pdo->exec($sql);
+            if (is_array($files)) {
+                sort($files);
+                foreach ($files as $file) {
+                    $name = basename($file);
+                    if (isset($ranSet[$name])) {
+                        continue;
+                    }
+                    $sql = file_get_contents($file);
+                    if ($sql === false || trim($sql) === '') {
+                        continue;
+                    }
+                    $pdo->exec($sql);
+                    $stmt = $pdo->prepare(
+                        "INSERT IGNORE INTO schema_migrations (migration) VALUES (?)"
+                    );
+                    $stmt->execute([$name]);
+                }
             }
 
-            // Procesar Semillas (opcional pero recomendado para el primer despliegue)
-            $files = glob($seedsDir . '*.sql');
-            sort($files);
-            foreach ($files as $file) {
-                $sql = file_get_contents($file);
-                $pdo->exec($sql);
+            // Seeds only on a completely fresh install (no prior migrations).
+            if ($isFreshInstall) {
+                $files = glob($seedsDir . '*.sql');
+                if (is_array($files)) {
+                    sort($files);
+                    foreach ($files as $file) {
+                        $sql = file_get_contents($file);
+                        if ($sql !== false && trim($sql) !== '') {
+                            $pdo->exec($sql);
+                        }
+                    }
+                }
             }
 
         } catch (Exception $e) {
-            // En producción, podrías loguear esto en lugar de mostrarlo
-            error_log("AutoMigrator Error: " . $e->getMessage());
+            error_log('AutoMigrator Error: ' . $e->getMessage());
         }
     }
 }
