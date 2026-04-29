@@ -1,86 +1,113 @@
-# 🚀 Guía de Despliegue en cPanel (Git Pull)
+# Guia de Despliegue en cPanel
 
-Esta guía detalla el proceso para desplegar y actualizar **FeActiva Iglesia SaaS** utilizando la herramienta "Git™ Version Control" de cPanel.
+Esta guia define el proceso de deploy para **FeActiva Iglesia SaaS** usando GitHub y la herramienta **Git Version Control** de cPanel.
 
-## 📋 Requisitos Previos
-- Acceso al cPanel del dominio (p.ej., `iglesia.feactiva.cl`).
-- Repositorio de Git configurado y con acceso (SSH Key configurada en cPanel si el repo es privado).
-- Base de Datos MySQL creada en cPanel.
+## Regla Operativa
 
----
+Codex puede preparar cambios, validar, hacer commit y hacer push al repositorio remoto.
 
-## 🛠️ Paso 1: Configuración Inicial de Git en cPanel
+El **pull en cPanel se hace siempre manualmente por el usuario** desde **Git Version Control**. Codex no debe asumir que puede ejecutar el pull en el hosting ni reemplazar archivos directamente en `public_html`.
 
-1. Inicia sesión en **cPanel**.
-2. Ve a la sección **Archivos** > **Git™ Version Control**.
-3. Haz clic en **Create**.
-4. Configura el repositorio:
-   - **Clone URL**: La URL SSH de tu repositorio (ej: `git@github.com:usuario/repo.git`).
-   - **File Root**: La ruta donde se clonará. Se recomienda una carpeta fuera de `public_html` si es posible, o directamente en el root del subdominio.
-   - **Repository Name**: `feactiva-saas`.
-5. Haz clic en **Create**.
+## Requisitos Previos
 
----
+- Acceso al cPanel del dominio, por ejemplo `iglesia.feactiva.cl`.
+- Repositorio Git configurado en cPanel.
+- Base de datos MySQL creada.
+- Archivo `.env` creado manualmente en produccion.
 
-## ⚙️ Paso 2: Configuración del Archivo `.env`
+## Configuracion Inicial
 
-Dado que el archivo `.env` no se sube al repositorio por seguridad, debes crearlo manualmente:
+1. Iniciar sesion en cPanel.
+2. Abrir **Git Version Control**.
+3. Crear o administrar el repositorio del proyecto.
+4. Verificar que el branch configurado sea el branch usado para deploy, normalmente `main`.
+5. Verificar que la carpeta destino corresponda al subdominio correcto.
 
-1. Ve al **Administrador de Archivos** en cPanel.
-2. Entra en la carpeta donde clonaste el proyecto.
-3. Crea un nuevo archivo llamado `.env`.
-4. Copia el contenido de `.env.example` y actualiza los valores de producción:
-   ```env
-   DB_HOST=localhost
-   DB_NAME=tu_usuario_dbname
-   DB_USER=tu_usuario_dbuser
-   DB_PASS=tu_password_seguro
-   APP_ENV=production
-   APP_URL=https://iglesia.feactiva.cl
-   JWT_SECRET=un_token_muy_largo_y_aleatorio
-   ```
+## Archivo `.env`
 
----
+El archivo `.env` no se sube al repositorio. Debe crearse y mantenerse manualmente en cPanel.
 
-## 🗄️ Paso 3: Base de Datos
+1. Abrir **Administrador de Archivos**.
+2. Entrar a la carpeta del proyecto.
+3. Crear o editar `.env`.
+4. Copiar valores desde `.env.example` y completar credenciales reales.
 
-1. En cPanel, ve a **Bases de Datos MySQL®**.
-2. Crea la base de datos y el usuario (asegúrate de darle todos los privilegios).
-3. Ve a **phpMyAdmin**.
-4. Selecciona la base de datos recién creada.
-5. Importa los archivos SQL que se encuentran en `database/migrations/` (en orden cronológico).
+Variables criticas:
 
----
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://iglesia.feactiva.cl
 
-## 🌐 Paso 4: Configuración del Servidor Web (Apache)
+DB_HOST=localhost
+DB_NAME=
+DB_USER=
+DB_PASS=
 
-Para que el dominio apunte correctamente a la aplicación, asegúrate de:
+JWT_SECRET=
+WHATSAPP_INTEGRATION_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=https://iglesia.feactiva.cl/api/v1/integrations/google/callback
+GOOGLE_TOKEN_ENCRYPTION_KEY=
+```
 
-1. **Frontend**: Si el frontend es estático, el `DocumentRoot` del dominio debe apuntar a la carpeta `frontend/`.
-2. **Backend**: El backend debe ser accesible (generalmente a través de un subdominio como `api.iglesia.feactiva.cl` apuntando a `backend/public/`).
-3. **.htaccess**: Si usas una estructura combinada, asegúrate de tener un `.htaccess` en el root que redirija las peticiones según corresponda.
+## Base de Datos
 
----
+Las migraciones se aplican manualmente en phpMyAdmin o desde la herramienta SQL disponible en el hosting.
 
-## 🔄 Paso 5: Proceso de Actualización (Pull)
+1. Abrir phpMyAdmin.
+2. Seleccionar la base de datos del SaaS.
+3. Ejecutar migraciones nuevas en orden.
+4. Ejecutar seeds solo si corresponde al entorno.
 
-Cada vez que quieras subir cambios nuevos:
+No ejecutar seeds marcados como desarrollo en produccion salvo decision explicita.
 
-1. Haz **Push** de tus cambios locales a la rama principal (`main` o `master`).
-2. En cPanel, ve a **Git™ Version Control**.
-3. Busca tu repositorio y haz clic en **Manage**.
-4. Ve a la pestaña **Pull or Deploy**.
-5. Haz clic en **Update from Remote**.
-6. (Opcional) Si configuraste un archivo `deploy.sh` o `cpanel.yml`, los cambios se aplicarán automáticamente. Si no, verifica si hay cambios en la base de datos que debas aplicar manualmente en phpMyAdmin.
+## Proceso de Deploy
 
----
+Cuando Codex termine cambios:
 
-## 📂 Permisos de Carpetas
-Asegúrate de que las siguientes carpetas tengan permisos de escritura (`755` o `775` según el servidor):
-- `/backend/logs/`
-- `/backend/storage/` (si existe)
+1. Codex valida el codigo localmente.
+2. Codex hace commit.
+3. Codex hace push a GitHub.
+4. El usuario entra a cPanel.
+5. El usuario abre **Git Version Control**.
+6. El usuario selecciona el repositorio.
+7. El usuario ejecuta manualmente **Update from Remote** o **Pull**.
+8. El usuario aplica migraciones nuevas si las hay.
+9. El usuario prueba endpoints o flujo real.
 
----
+## Webhook FeActiva Actual
 
-> [!TIP]
-> **Automatización**: Considera crear un archivo `.cpanel.yml` en la raíz para automatizar la copia de archivos tras cada pull.
+El webhook real vive en:
+
+```text
+https://feactiva.cl/whatsapp/webhook.php
+```
+
+Si los archivos del webhook pertenecen a otro repositorio o no estan conectados a Git en local, Codex solo puede modificar la copia local. El deploy a `public_html/whatsapp/` debe hacerse manualmente por cPanel, salvo que ese proyecto tenga un repositorio remoto configurado y se haya hecho push.
+
+Archivos habituales del webhook:
+
+```text
+whatsapp/webhook.php
+whatsapp/SaasClient.php
+```
+
+## Logs Temporales
+
+Durante debug puede existir:
+
+```text
+public_html/whatsapp/whatsapp_debug.log
+```
+
+Ese log es temporal y debe eliminarse o desactivarse al terminar la investigacion.
+
+## Checklist Despues del Pull
+
+- Confirmar que `git` en cPanel quedo en el ultimo commit.
+- Confirmar que `.env` sigue intacto.
+- Confirmar que las migraciones nuevas se aplicaron.
+- Probar endpoint critico.
+- Revisar `error_log` y logs temporales.
