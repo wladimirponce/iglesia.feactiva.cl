@@ -14,6 +14,19 @@ require_once __DIR__ . '/../../../modules/agent/AgentRepository.php';
 require_once __DIR__ . '/../../../modules/agent/AgentIntentRouter.php';
 require_once __DIR__ . '/../../../modules/agent/AgentResponseComposer.php';
 require_once __DIR__ . '/../../../modules/agent/AgentAuditLogger.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/NotificationSenderInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/WhatsAppSenderInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/EmailSenderInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/CalendarProviderInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/SpeechToTextInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/contracts/TextToSpeechInterface.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/WhatsAppSenderStub.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/EmailSenderStub.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/GoogleCalendarProviderStub.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/SpeechToTextStub.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/TextToSpeechStub.php';
+require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarRepository.php';
+require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarService.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaAuditLogger.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaValidator.php';
 require_once __DIR__ . '/../../../modules/agenda/AgendaRepository.php';
@@ -86,14 +99,19 @@ function handleInternalWhatsAppMessage(): void
     $input = internalWhatsappMessageJsonInput();
     $phone = trim((string) ($input['phone'] ?? ''));
     $messageText = trim((string) ($input['message_text'] ?? ''));
+    $messageType = internalWhatsappMessageType($input['message_type'] ?? 'text');
+    $mediaUrl = internalWhatsappNullableString($input['media_url'] ?? null);
     $providerMessageId = internalWhatsappNullableString($input['provider_message_id'] ?? null);
 
     $errors = [];
     if ($phone === '') {
         $errors[] = ['field' => 'phone', 'message' => 'Phone es requerido.'];
     }
-    if ($messageText === '') {
+    if ($messageType === 'text' && $messageText === '') {
         $errors[] = ['field' => 'message_text', 'message' => 'Message text es requerido.'];
+    }
+    if ($messageType === 'audio' && $mediaUrl === null) {
+        $errors[] = ['field' => 'media_url', 'message' => 'Media URL es requerida para audio.'];
     }
     if ($errors !== []) {
         Response::error('VALIDATION_ERROR', 'Datos invalidos.', $errors, 422);
@@ -150,6 +168,31 @@ function handleInternalWhatsAppMessage(): void
     }
 
     $conversationId = internalWhatsappFindOrCreateConversation($tenantId, $userId, $phone, $normalizedPhone);
+    $transcriptionText = null;
+    $transcriptionStatus = null;
+    $responseMode = 'text';
+    if ($messageType === 'audio') {
+        internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.received', 'success', [
+            'conversation_id' => $conversationId,
+            'media_url_present' => $mediaUrl !== null,
+        ]);
+        $transcription = (new SpeechToTextStub())->transcribe((string) $mediaUrl, [
+            'fallback_text' => $messageText !== '' ? $messageText : null,
+            'provider_message_id_present' => $providerMessageId !== null,
+        ]);
+        $transcriptionText = trim((string) ($transcription['transcription_text'] ?? ''));
+        $transcriptionStatus = ($transcription['success'] ?? false) === true ? 'completed' : 'failed';
+        if ($transcriptionText === '') {
+            $transcriptionText = 'Mensaje de audio recibido';
+        }
+        $messageText = $transcriptionText;
+        $responseMode = 'audio';
+        internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.transcribed', $transcriptionStatus === 'completed' ? 'success' : 'failed', [
+            'conversation_id' => $conversationId,
+            'simulated' => $transcription['simulated'] ?? false,
+        ]);
+    }
+
     $activeState = $stateService->active($normalizedPhone);
     if ($activeState !== null) {
         if ((string) $activeState['state_key'] === 'agenda_waiting_missing_fields') {
@@ -158,8 +201,20 @@ function handleInternalWhatsAppMessage(): void
             $stateService->close($activeState, 'completed');
         } else {
         $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
-        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', ['conversation_state_id' => (int) $activeState['id']]);
-        Response::success(['found' => true, 'response_text' => $responseText, 'agent_request_id' => null]);
+        $audioResponseUrl = internalWhatsappAudioResponseUrl($responseMode, $responseText, $tenantId, $userId, null, $conversationId);
+        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', [
+            'conversation_state_id' => (int) $activeState['id'],
+            'message_type' => $responseMode === 'audio' ? 'audio' : 'text',
+            'response_mode' => $responseMode,
+            'audio_response_url' => $audioResponseUrl,
+        ]);
+        Response::success([
+            'found' => true,
+            'response_text' => $responseText,
+            'response_mode' => $responseMode,
+            'audio_url' => $audioResponseUrl,
+            'agent_request_id' => null,
+        ]);
         return;
         }
     }
@@ -173,8 +228,20 @@ function handleInternalWhatsAppMessage(): void
         ]);
         $stateService->create($tenantId, $userId, $normalizedPhone, $conversationId, 'whatsapp_draft_waiting_confirmation', ['draft_id' => $draftId]);
         $responseText = 'Este mensaje enviare: ' . $draftIntent['message_text'] . ' ¿Esta bien asi o prefieres que lo mejore?';
-        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', ['draft_id' => $draftId]);
-        Response::success(['found' => true, 'response_text' => $responseText, 'agent_request_id' => null]);
+        $audioResponseUrl = internalWhatsappAudioResponseUrl($responseMode, $responseText, $tenantId, $userId, null, $conversationId);
+        internalWhatsappCreateMessage($tenantId, $conversationId, $userId, 'outbound', $responseText, null, 'queued', [
+            'draft_id' => $draftId,
+            'message_type' => $responseMode === 'audio' ? 'audio' : 'text',
+            'response_mode' => $responseMode,
+            'audio_response_url' => $audioResponseUrl,
+        ]);
+        Response::success([
+            'found' => true,
+            'response_text' => $responseText,
+            'response_mode' => $responseMode,
+            'audio_url' => $audioResponseUrl,
+            'agent_request_id' => null,
+        ]);
         return;
     }
 
@@ -186,7 +253,14 @@ function handleInternalWhatsAppMessage(): void
         $messageText,
         $providerMessageId,
         'received',
-        ['source' => 'whatsapp_webhook']
+        [
+            'source' => 'whatsapp_webhook',
+            'message_type' => $messageType,
+            'media_url' => $mediaUrl,
+            'transcription_text' => $transcriptionText,
+            'transcription_status' => $transcriptionStatus,
+            'response_mode' => $responseMode,
+        ]
     );
     internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.message.received', 'success', [
         'conversation_id' => $conversationId,
@@ -206,6 +280,19 @@ function handleInternalWhatsAppMessage(): void
     $agentResult = $agentService->createRequest($tenantId, $userId, 'whatsapp', $messageText, $conversationId);
     $responseText = (string) ($agentResult['response']['text'] ?? '');
     $agentRequestId = (int) ($agentResult['id'] ?? 0);
+    $audioResponseUrl = null;
+    if ($responseMode === 'audio') {
+        $speech = (new TextToSpeechStub())->synthesize($responseText, [
+            'conversation_id' => $conversationId,
+            'agent_request_id' => $agentRequestId,
+        ]);
+        $audioResponseUrl = (string) ($speech['audio_url'] ?? '');
+        internalWhatsappAudit($tenantId, $userId, $agentRequestId, 'whatsapp.audio.response_generated', ($speech['success'] ?? false) === true ? 'success' : 'failed', [
+            'conversation_id' => $conversationId,
+            'simulated' => $speech['simulated'] ?? false,
+            'audio_url_present' => $audioResponseUrl !== '',
+        ]);
+    }
     $tool = is_array($agentResult['tool'] ?? null) ? $agentResult['tool'] : [];
     $output = is_array($tool['output'] ?? null) ? $tool['output'] : [];
     if (($tool['status'] ?? '') === 'failed' && is_array($output['missing_fields'] ?? null) && $output['missing_fields'] !== []) {
@@ -223,7 +310,12 @@ function handleInternalWhatsAppMessage(): void
         $responseText,
         null,
         'queued',
-        ['agent_request_id' => $agentRequestId]
+        [
+            'agent_request_id' => $agentRequestId,
+            'message_type' => $responseMode === 'audio' ? 'audio' : 'text',
+            'response_mode' => $responseMode,
+            'audio_response_url' => $audioResponseUrl,
+        ]
     );
     internalWhatsappAudit($tenantId, $userId, $agentRequestId, 'whatsapp.message.responded', 'success', [
         'conversation_id' => $conversationId,
@@ -232,6 +324,8 @@ function handleInternalWhatsAppMessage(): void
     Response::success([
         'found' => true,
         'response_text' => $responseText,
+        'response_mode' => $responseMode,
+        'audio_url' => $audioResponseUrl,
         'agent_request_id' => $agentRequestId,
     ]);
 }
@@ -239,6 +333,26 @@ function handleInternalWhatsAppMessage(): void
 function internalWhatsappJson(array $value): string
 {
     return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}';
+}
+
+function internalWhatsappAudioResponseUrl(string $responseMode, string $responseText, int $tenantId, int $userId, ?int $requestId, int $conversationId): ?string
+{
+    if ($responseMode !== 'audio') {
+        return null;
+    }
+
+    $speech = (new TextToSpeechStub())->synthesize($responseText, [
+        'conversation_id' => $conversationId,
+        'agent_request_id' => $requestId,
+    ]);
+    $audioUrl = (string) ($speech['audio_url'] ?? '');
+    internalWhatsappAudit($tenantId, $userId, $requestId, 'whatsapp.audio.response_generated', ($speech['success'] ?? false) === true ? 'success' : 'failed', [
+        'conversation_id' => $conversationId,
+        'simulated' => $speech['simulated'] ?? false,
+        'audio_url_present' => $audioUrl !== '',
+    ]);
+
+    return $audioUrl !== '' ? $audioUrl : null;
 }
 
 function internalWhatsappMessageJsonInput(): array
@@ -262,6 +376,12 @@ function internalWhatsappNullableString(mixed $value): ?string
 
     $value = trim($value);
     return $value === '' ? null : $value;
+}
+
+function internalWhatsappMessageType(mixed $value): string
+{
+    $value = is_string($value) ? strtolower(trim($value)) : 'text';
+    return in_array($value, ['text', 'audio', 'image', 'document'], true) ? $value : 'text';
 }
 
 function internalWhatsappIpAddress(): ?string
@@ -354,7 +474,9 @@ function internalWhatsappCreateMessage(
     $messageType = in_array((string) ($payload['message_type'] ?? 'text'), ['text', 'audio', 'image', 'document'], true)
         ? (string) ($payload['message_type'] ?? 'text')
         : 'text';
-    $responseMode = $messageType === 'audio' ? 'audio' : 'text';
+    $responseMode = in_array((string) ($payload['response_mode'] ?? ''), ['text', 'audio'], true)
+        ? (string) $payload['response_mode']
+        : ($messageType === 'audio' ? 'audio' : 'text');
     $sql = "
         INSERT INTO wa_messages (
             tenant_id,
@@ -368,6 +490,7 @@ function internalWhatsappCreateMessage(
             transcription_text,
             transcription_status,
             response_mode,
+            audio_response_url,
             payload,
             status,
             sent_at,
@@ -384,6 +507,7 @@ function internalWhatsappCreateMessage(
             :transcription_text,
             :transcription_status,
             :response_mode,
+            :audio_response_url,
             :payload,
             :status,
             CASE WHEN :direction_sent = 'outbound' THEN UTC_TIMESTAMP() ELSE NULL END,
@@ -402,8 +526,9 @@ function internalWhatsappCreateMessage(
         'body' => $body,
         'media_url' => $payload['media_url'] ?? null,
         'transcription_text' => $payload['transcription_text'] ?? null,
-        'transcription_status' => $messageType === 'audio' ? 'pending' : 'not_required',
+        'transcription_status' => $payload['transcription_status'] ?? ($messageType === 'audio' && $direction === 'inbound' ? 'pending' : null),
         'response_mode' => $responseMode,
+        'audio_response_url' => $payload['audio_response_url'] ?? null,
         'payload' => internalWhatsappJson($payload),
         'status' => $status,
         'direction_sent' => $direction,

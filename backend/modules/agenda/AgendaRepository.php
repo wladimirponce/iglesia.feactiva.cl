@@ -201,9 +201,13 @@ final class AgendaRepository
                 recipient_persona_id,
                 recipient_phone,
                 recipient_email,
+                external_provider,
+                external_message_id,
                 message_text,
                 scheduled_at,
-                status
+                status,
+                delivery_status,
+                delivery_response_json
             ) VALUES (
                 :tenant_id,
                 :agenda_item_id,
@@ -213,9 +217,13 @@ final class AgendaRepository
                 :recipient_persona_id,
                 :recipient_phone,
                 :recipient_email,
+                :external_provider,
+                :external_message_id,
                 :message_text,
                 :scheduled_at,
-                'scheduled'
+                'scheduled',
+                :delivery_status,
+                :delivery_response_json
             )
         ";
         $statement = Database::connection()->prepare($sql);
@@ -228,10 +236,44 @@ final class AgendaRepository
             'recipient_persona_id' => $input['recipient_persona_id'] ?? null,
             'recipient_phone' => $input['recipient_phone'] ?? null,
             'recipient_email' => $input['recipient_email'] ?? null,
+            'external_provider' => $input['external_provider'] ?? null,
+            'external_message_id' => $input['external_message_id'] ?? null,
             'message_text' => $input['message_text'],
             'scheduled_at' => $input['scheduled_at'],
+            'delivery_status' => $input['delivery_status'] ?? 'pending',
+            'delivery_response_json' => isset($input['delivery_response_json']) ? $this->json($input['delivery_response_json']) : null,
         ]);
         return (int) Database::connection()->lastInsertId();
+    }
+
+    public function markNotificationDelivery(int $tenantId, int $notificationId, string $deliveryStatus, ?string $externalProvider, ?string $externalMessageId, array $response): void
+    {
+        $status = $deliveryStatus === 'sent' ? 'sent' : 'failed';
+        $sql = "
+            UPDATE agenda_notifications
+            SET status = :status,
+                delivery_status = :delivery_status,
+                external_provider = :external_provider,
+                external_message_id = :external_message_id,
+                delivery_response_json = :delivery_response_json,
+                sent_at = CASE WHEN :delivery_status_sent = 'sent' THEN UTC_TIMESTAMP() ELSE sent_at END,
+                attempts = attempts + 1,
+                updated_at = UTC_TIMESTAMP()
+            WHERE tenant_id = :tenant_id
+              AND id = :id
+              AND deleted_at IS NULL
+        ";
+        $statement = Database::connection()->prepare($sql);
+        $statement->execute([
+            'tenant_id' => $tenantId,
+            'id' => $notificationId,
+            'status' => $status,
+            'delivery_status' => $deliveryStatus,
+            'external_provider' => $externalProvider,
+            'external_message_id' => $externalMessageId,
+            'delivery_response_json' => $this->json($response),
+            'delivery_status_sent' => $deliveryStatus,
+        ]);
     }
 
     public function personaExists(int $tenantId, int $personaId): bool
@@ -246,5 +288,10 @@ final class AgendaRepository
         $statement = Database::connection()->prepare("SELECT id FROM crm_familias WHERE tenant_id = :tenant_id AND id = :id AND deleted_at IS NULL LIMIT 1");
         $statement->execute(['tenant_id' => $tenantId, 'id' => $familiaId]);
         return $statement->fetchColumn() !== false;
+    }
+
+    private function json(array $value): string
+    {
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}';
     }
 }

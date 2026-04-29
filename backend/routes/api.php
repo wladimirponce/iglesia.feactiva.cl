@@ -57,6 +57,25 @@ $router->post('/api/v1/integrations/whatsapp/identify', [$whatsAppIdentityContro
     IntegrationAuthMiddleware::class,
 ]);
 
+$googleOAuthController = new GoogleOAuthController();
+
+$router->get('/api/v1/integrations/google/auth-url', [$googleOAuthController, 'authUrl'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+]);
+
+$router->get('/api/v1/integrations/google/callback', [$googleOAuthController, 'callback']);
+
+$router->get('/api/v1/integrations/google/status', [$googleOAuthController, 'status'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+]);
+
+$router->post('/api/v1/integrations/google/disconnect', [$googleOAuthController, 'disconnect'], [
+    AuthMiddleware::class,
+    TenantMiddleware::class,
+]);
+
 $agentController = new AgentController();
 
 $router->post('/api/v1/agent/requests', [$agentController, 'store'], [
