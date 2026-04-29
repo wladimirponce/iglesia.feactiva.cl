@@ -153,7 +153,7 @@ function handleInternalWhatsAppMessage(): void
     }
 
     if (($identity['found'] ?? false) !== true || ($identity['user'] ?? null) === null) {
-        $normalizedPhone = PhoneNormalizer::normalize($phone, 'CL');
+        $normalizedPhone = PhoneNormalizer::toE164($phone, 'CL') ?? $phone;
         $activeState = $stateService->active($normalizedPhone);
         if ($activeState !== null) {
             $responseText = internalWhatsappHandleConversationState($activeState, $messageText, $stateService, $stateResolver, $draftService);
