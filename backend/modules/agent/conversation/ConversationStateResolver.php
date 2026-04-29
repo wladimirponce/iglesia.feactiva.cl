@@ -47,7 +47,7 @@ final class ConversationStateResolver
     public function detectOutboundDraft(string $text): ?array
     {
         $normalized = $this->normalizeText($text);
-        $pattern = '/\b(?:envia|enviale|manda|mandale|dile)\b(?:\s+un)?(?:\s+(?:whatsapp|mensaje))?\s+(?:al|a)\s+(.+?)\s+(?:diciendo|que\s+diga|:)\s*(.+)$/iu';
+        $pattern = '/\b(?:envia|enviale|manda|mandale|dile)\b(?:\s+un)?(?:\s+(?:whatsapp|mensaje))?\s+(?:al|a)\s+(?:numero\s+)?(.+?)\s+(?:diciendo|que\s+diga|diga|da|con\s+el\s+texto|:)\s*(.+)$/iu';
 
         if (preg_match($pattern, $normalized, $matches) === 1) {
             return [
@@ -62,6 +62,10 @@ final class ConversationStateResolver
     private function normalizeText(string $text): string
     {
         $text = mb_strtolower(trim($text), 'UTF-8');
+        $transliterated = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+        if ($transliterated !== false) {
+            $text = $transliterated;
+        }
         return str_replace(
             ['á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ'],
             ['a', 'e', 'i', 'o', 'u', 'u', 'n'],
