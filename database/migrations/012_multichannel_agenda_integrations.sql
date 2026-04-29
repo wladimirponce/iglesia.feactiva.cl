@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 ALTER TABLE wa_messages
     ADD COLUMN IF NOT EXISTS media_url TEXT NULL AFTER body,
     ADD COLUMN IF NOT EXISTS transcription_text TEXT NULL AFTER media_url,
-    ADD COLUMN IF NOT EXISTS transcription_status ENUM('pending','completed','failed') NULL AFTER transcription_text,
+    ADD COLUMN IF NOT EXISTS transcription_status ENUM('not_required','pending','completed','failed') NOT NULL DEFAULT 'not_required' AFTER transcription_text,
     ADD COLUMN IF NOT EXISTS response_mode ENUM('text','audio') NOT NULL DEFAULT 'text' AFTER transcription_status,
     ADD COLUMN IF NOT EXISTS audio_response_url TEXT NULL AFTER response_mode;
 

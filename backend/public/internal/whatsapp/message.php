@@ -89,7 +89,13 @@ $middleware = new IntegrationAuthMiddleware();
 $middleware->handle(static function (): void {
     try {
         handleInternalWhatsAppMessage();
-    } catch (Throwable) {
+    } catch (Throwable $throwable) {
+        internalWhatsappDebugLog('WHATSAPP_MESSAGE_EXCEPTION', [
+            'exception_class' => get_class($throwable),
+            'message' => $throwable->getMessage(),
+            'file' => $throwable->getFile(),
+            'line' => $throwable->getLine(),
+        ]);
         Response::error('WHATSAPP_MESSAGE_ERROR', 'No fue posible procesar el mensaje de WhatsApp.', [], 500);
     }
 });
@@ -337,6 +343,13 @@ function internalWhatsappJson(array $value): string
     return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}';
 }
 
+function internalWhatsappDebugLog(string $event, array $context): void
+{
+    $path = __DIR__ . '/whatsapp_internal_debug.log';
+    $line = '[' . gmdate('Y-m-d H:i:s') . '] ' . $event . ': ' . (json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '{}') . PHP_EOL;
+    @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+}
+
 function internalWhatsappAudioResponseUrl(string $responseMode, string $responseText, int $tenantId, int $userId, ?int $requestId, int $conversationId): ?string
 {
     if ($responseMode !== 'audio') {
@@ -543,7 +556,7 @@ function internalWhatsappCreateMessage(
         'body' => $body,
         'media_url' => $payload['media_url'] ?? null,
         'transcription_text' => $payload['transcription_text'] ?? null,
-        'transcription_status' => $payload['transcription_status'] ?? ($messageType === 'audio' && $direction === 'inbound' ? 'pending' : null),
+        'transcription_status' => $payload['transcription_status'] ?? ($messageType === 'audio' && $direction === 'inbound' ? 'pending' : 'not_required'),
         'response_mode' => $responseMode,
         'audio_response_url' => $payload['audio_response_url'] ?? null,
         'payload' => internalWhatsappJson($payload),
