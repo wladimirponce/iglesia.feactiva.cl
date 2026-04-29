@@ -25,6 +25,7 @@ require_once __DIR__ . '/../../../modules/integrations/adapters/WhatsAppSenderSt
 require_once __DIR__ . '/../../../modules/integrations/adapters/EmailSenderStub.php';
 require_once __DIR__ . '/../../../modules/integrations/adapters/GoogleCalendarProviderStub.php';
 require_once __DIR__ . '/../../../modules/integrations/adapters/SpeechToTextStub.php';
+require_once __DIR__ . '/../../../modules/integrations/adapters/OpenAISpeechToTextAdapter.php';
 require_once __DIR__ . '/../../../modules/integrations/adapters/TextToSpeechStub.php';
 require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarRepository.php';
 require_once __DIR__ . '/../../../modules/integrations/google/GoogleCalendarService.php';
@@ -114,6 +115,41 @@ $middleware->handle(static function (): void {
     }
 });
 
+/**
+ * @param array<string, mixed> $metadata
+ * @return array<string, mixed>
+ */
+function internalWhatsappTranscribeAudio(string $mediaUrl, array $metadata): array
+{
+    $provider = strtolower(trim((string) env('SPEECH_TO_TEXT_PROVIDER', 'stub')));
+    $enabledValue = strtolower(trim((string) env('SPEECH_TO_TEXT_ENABLED', 'false')));
+    $enabled = in_array($enabledValue, ['1', 'true', 'yes', 'on'], true);
+    $shouldUseOpenAi = $provider === 'openai' || ($enabled && $provider !== 'stub');
+
+    if ($shouldUseOpenAi && class_exists('OpenAISpeechToTextAdapter')) {
+        $openAi = new OpenAISpeechToTextAdapter();
+        if ($openAi->canTranscribe()) {
+            $result = $openAi->transcribe($mediaUrl, $metadata);
+            $text = trim((string) ($result['transcription_text'] ?? ''));
+            if (($result['success'] ?? false) === true && $text !== '') {
+                $result['fallback_used'] = false;
+                return $result;
+            }
+
+            $fallback = (new SpeechToTextStub())->transcribe($mediaUrl, $metadata);
+            $fallback['fallback_used'] = true;
+            $fallback['fallback_reason'] = $result['error'] ?? 'OPENAI_TRANSCRIPTION_FAILED';
+            $fallback['provider'] = 'stub';
+            return $fallback;
+        }
+    }
+
+    $fallback = (new SpeechToTextStub())->transcribe($mediaUrl, $metadata);
+    $fallback['fallback_used'] = false;
+    $fallback['provider'] = 'stub';
+    return $fallback;
+}
+
 function handleInternalWhatsAppMessage(): void
 {
     $input = internalWhatsappMessageJsonInput();
@@ -196,7 +232,7 @@ function handleInternalWhatsAppMessage(): void
             'conversation_id' => $conversationId,
             'media_url_present' => $mediaUrl !== null,
         ]);
-        $transcription = (new SpeechToTextStub())->transcribe((string) $mediaUrl, [
+        $transcription = internalWhatsappTranscribeAudio((string) $mediaUrl, [
             'fallback_text' => $messageText !== '' ? $messageText : null,
             'provider_message_id_present' => $providerMessageId !== null,
         ]);
@@ -210,6 +246,11 @@ function handleInternalWhatsAppMessage(): void
         internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.transcribed', $transcriptionStatus === 'completed' ? 'success' : 'failed', [
             'conversation_id' => $conversationId,
             'simulated' => $transcription['simulated'] ?? false,
+            'provider' => $transcription['provider'] ?? null,
+            'model' => $transcription['model'] ?? null,
+            'fallback_used' => $transcription['fallback_used'] ?? false,
+            'fallback_reason' => $transcription['fallback_reason'] ?? null,
+            'error' => $transcription['error'] ?? null,
         ]);
     }
 

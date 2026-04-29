@@ -102,6 +102,7 @@ require_once __DIR__ . '/../modules/integrations/adapters/WhatsAppSenderStub.php
 require_once __DIR__ . '/../modules/integrations/adapters/EmailSenderStub.php';
 require_once __DIR__ . '/../modules/integrations/adapters/GoogleCalendarProviderStub.php';
 require_once __DIR__ . '/../modules/integrations/adapters/SpeechToTextStub.php';
+require_once __DIR__ . '/../modules/integrations/adapters/OpenAISpeechToTextAdapter.php';
 require_once __DIR__ . '/../modules/integrations/adapters/TextToSpeechStub.php';
 require_once __DIR__ . '/../modules/integrations/google/GoogleCalendarRepository.php';
 require_once __DIR__ . '/../modules/integrations/google/GoogleCalendarService.php';
