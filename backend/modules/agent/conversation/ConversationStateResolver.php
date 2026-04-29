@@ -6,17 +6,20 @@ final class ConversationStateResolver
 {
     public function isAffirmative(string $text): bool
     {
-        return preg_match('/\b(si|s[ií]|claro|ok|quiero|envialo|env[ií]alo|esta bien|est[aá] bien)\b/iu', $text) === 1;
+        $text = $this->normalizeText($text);
+        return preg_match('/\b(si|claro|ok|quiero|envialo|esta bien)\b/iu', $text) === 1;
     }
 
     public function isNegative(string $text): bool
     {
-        return preg_match('/\b(no|cancelar|cancela|cancelalo|canc[eé]lalo)\b/iu', $text) === 1;
+        $text = $this->normalizeText($text);
+        return preg_match('/\b(no|cancelar|cancela|cancelalo)\b/iu', $text) === 1;
     }
 
     public function wantsImprove(string $text): bool
     {
-        return preg_match('/\b(mejoralo|mej[oó]ralo|mejorar|redactalo mejor|red[aá]ctalo mejor)\b/iu', $text) === 1;
+        $text = $this->normalizeText($text);
+        return preg_match('/\b(mejoralo|mejorar|redactalo mejor)\b/iu', $text) === 1;
     }
 
     public function extractNameEmail(string $text): ?array
@@ -35,12 +38,26 @@ final class ConversationStateResolver
 
     public function detectOutboundDraft(string $text): ?array
     {
-        if (preg_match('/\b(?:enviale|env[ií]ale|manda|dile)\b.*?\b(?:whatsapp|mensaje)?\s*(?:al|a)\s+(.+?)\s+(?:diciendo|que diga|:)\s*(.+)$/iu', $text, $matches) === 1) {
+        $normalized = $this->normalizeText($text);
+        $pattern = '/\b(?:envia|enviale|manda|mandale|dile)\b(?:\s+un)?(?:\s+(?:whatsapp|mensaje))?\s+(?:al|a)\s+(.+?)\s+(?:diciendo|que\s+diga|:)\s*(.+)$/iu';
+
+        if (preg_match($pattern, $normalized, $matches) === 1) {
             return [
                 'recipient_text' => trim($matches[1]),
                 'message_text' => trim($matches[2]),
             ];
         }
+
         return null;
+    }
+
+    private function normalizeText(string $text): string
+    {
+        $text = mb_strtolower(trim($text), 'UTF-8');
+        return str_replace(
+            ['á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ'],
+            ['a', 'e', 'i', 'o', 'u', 'u', 'n'],
+            $text
+        );
     }
 }

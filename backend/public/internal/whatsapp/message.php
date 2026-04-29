@@ -221,9 +221,11 @@ function handleInternalWhatsAppMessage(): void
 
     $draftIntent = $stateResolver->detectOutboundDraft($messageText);
     if ($draftIntent !== null) {
+        $recipientPhone = internalWhatsappDraftRecipientPhone((string) ($draftIntent['recipient_text'] ?? ''));
         $draftId = $draftService->create($tenantId, $userId, $conversationId, [
             'original_text' => $messageText,
             'draft_text' => $draftIntent['message_text'],
+            'recipient_phone' => $recipientPhone,
             'channel' => 'whatsapp',
         ]);
         $stateService->create($tenantId, $userId, $normalizedPhone, $conversationId, 'whatsapp_draft_waiting_confirmation', ['draft_id' => $draftId]);
@@ -382,6 +384,21 @@ function internalWhatsappMessageType(mixed $value): string
 {
     $value = is_string($value) ? strtolower(trim($value)) : 'text';
     return in_array($value, ['text', 'audio', 'image', 'document'], true) ? $value : 'text';
+}
+
+function internalWhatsappDraftRecipientPhone(string $recipientText): ?string
+{
+    $phone = PhoneNormalizer::toE164($recipientText, 'CL');
+    if ($phone !== null) {
+        return $phone;
+    }
+
+    $digits = preg_replace('/\D+/', '', $recipientText);
+    if (!is_string($digits) || $digits === '') {
+        return null;
+    }
+
+    return PhoneNormalizer::toE164($digits, 'CL');
 }
 
 function internalWhatsappIpAddress(): ?string
