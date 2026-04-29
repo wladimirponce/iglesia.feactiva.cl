@@ -157,6 +157,7 @@ function handleInternalWhatsAppMessage(): void
     $messageText = trim((string) ($input['message_text'] ?? ''));
     $messageType = internalWhatsappMessageType($input['message_type'] ?? 'text');
     $mediaUrl = internalWhatsappNullableString($input['media_url'] ?? null);
+    $mediaId = internalWhatsappNullableString($input['media_id'] ?? null);
     $providerMessageId = internalWhatsappNullableString($input['provider_message_id'] ?? null);
 
     $errors = [];
@@ -166,8 +167,8 @@ function handleInternalWhatsAppMessage(): void
     if ($messageType === 'text' && $messageText === '') {
         $errors[] = ['field' => 'message_text', 'message' => 'Message text es requerido.'];
     }
-    if ($messageType === 'audio' && $mediaUrl === null) {
-        $errors[] = ['field' => 'media_url', 'message' => 'Media URL es requerida para audio.'];
+    if ($messageType === 'audio' && $mediaUrl === null && $mediaId === null) {
+        $errors[] = ['field' => 'media_url', 'message' => 'Media URL o Media ID es requerido para audio.'];
     }
     if ($errors !== []) {
         Response::error('VALIDATION_ERROR', 'Datos invalidos.', $errors, 422);
@@ -232,10 +233,12 @@ function handleInternalWhatsAppMessage(): void
         internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.received', 'success', [
             'conversation_id' => $conversationId,
             'media_url_present' => $mediaUrl !== null,
+            'media_id_present' => $mediaId !== null,
         ]);
-        $transcription = internalWhatsappTranscribeAudio((string) $mediaUrl, [
+        $transcription = internalWhatsappTranscribeAudio((string) ($mediaUrl ?? ''), [
             'fallback_text' => $messageText !== '' ? $messageText : null,
             'provider_message_id_present' => $providerMessageId !== null,
+            'media_id' => $mediaId,
         ]);
         $transcriptionText = trim((string) ($transcription['transcription_text'] ?? ''));
         $transcriptionStatus = ($transcription['success'] ?? false) === true ? 'completed' : 'failed';
@@ -252,6 +255,7 @@ function handleInternalWhatsAppMessage(): void
             'fallback_used' => $transcription['fallback_used'] ?? false,
             'fallback_reason' => $transcription['fallback_reason'] ?? null,
             'error' => $transcription['error'] ?? null,
+            'media_resolved_from_id' => $transcription['media_resolved_from_id'] ?? false,
             'text' => $transcriptionText,
             'transcription_length' => strlen($transcriptionText),
         ];
@@ -338,6 +342,7 @@ function handleInternalWhatsAppMessage(): void
             'source' => 'whatsapp_webhook',
             'message_type' => $messageType,
             'media_url' => $mediaUrl,
+            'media_id' => $mediaId,
             'transcription_text' => $transcriptionText,
             'transcription_status' => $transcriptionStatus,
             'transcription_debug' => $transcriptionDebug,

@@ -23,7 +23,41 @@ final class OpenAISpeechToTextAdapter implements SpeechToTextInterface
             ];
         }
 
+        $mediaUrl = trim($mediaUrl);
+        $mediaId = trim((string) ($metadata['media_id'] ?? ''));
+        $resolvedFromId = false;
+        if ($mediaUrl === '' && $mediaId !== '') {
+            $resolved = $this->resolveMediaUrl($mediaId);
+            if (($resolved['success'] ?? false) !== true) {
+                return [
+                    'success' => false,
+                    'error' => $resolved['error'] ?? 'MEDIA_URL_RESOLVE_FAILED',
+                    'transcription_text' => '',
+                    'simulated' => false,
+                ];
+            }
+            $mediaUrl = (string) $resolved['media_url'];
+            $resolvedFromId = true;
+        }
+
+        if ($mediaUrl === '') {
+            return [
+                'success' => false,
+                'error' => 'MEDIA_URL_MISSING',
+                'transcription_text' => '',
+                'simulated' => false,
+            ];
+        }
+
         $download = $this->downloadMedia($mediaUrl);
+        if (($download['success'] ?? false) !== true && !$resolvedFromId && $mediaId !== '') {
+            $resolved = $this->resolveMediaUrl($mediaId);
+            if (($resolved['success'] ?? false) === true) {
+                $mediaUrl = (string) $resolved['media_url'];
+                $download = $this->downloadMedia($mediaUrl);
+                $resolvedFromId = true;
+            }
+        }
         if (($download['success'] ?? false) !== true) {
             return [
                 'success' => false,
@@ -35,12 +69,57 @@ final class OpenAISpeechToTextAdapter implements SpeechToTextInterface
 
         $filePath = (string) $download['file_path'];
         try {
-            return $this->transcribeFile($filePath, (string) ($download['mime_type'] ?? 'audio/ogg'));
+            $result = $this->transcribeFile($filePath, (string) ($download['mime_type'] ?? 'audio/ogg'));
+            $result['media_resolved_from_id'] = $resolvedFromId;
+            return $result;
         } finally {
             if (is_file($filePath)) {
                 @unlink($filePath);
             }
         }
+    }
+
+    /** @return array<string, mixed> */
+    private function resolveMediaUrl(string $mediaId): array
+    {
+        $waToken = trim((string) env('WA_ACCESS_TOKEN', ''));
+        if ($waToken === '') {
+            return ['success' => false, 'error' => 'WA_ACCESS_TOKEN_MISSING'];
+        }
+
+        $version = trim((string) env('WA_GRAPH_VERSION', 'v22.0')) ?: 'v22.0';
+        $ch = curl_init('https://graph.facebook.com/' . $version . '/' . rawurlencode($mediaId));
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $waToken,
+                'Accept: application/json',
+            ],
+        ]);
+
+        $raw = curl_exec($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($raw === false || $httpStatus < 200 || $httpStatus >= 300) {
+            return [
+                'success' => false,
+                'error' => 'MEDIA_URL_RESOLVE_FAILED',
+                'http_status' => $httpStatus,
+                'curl_error' => $curlError !== '' ? $curlError : null,
+            ];
+        }
+
+        $decoded = json_decode((string) $raw, true);
+        $mediaUrl = is_array($decoded) ? trim((string) ($decoded['url'] ?? '')) : '';
+        if ($mediaUrl === '') {
+            return ['success' => false, 'error' => 'MEDIA_URL_NOT_FOUND', 'http_status' => $httpStatus];
+        }
+
+        return ['success' => true, 'media_url' => $mediaUrl, 'http_status' => $httpStatus];
     }
 
     /** @return array<string, mixed> */
