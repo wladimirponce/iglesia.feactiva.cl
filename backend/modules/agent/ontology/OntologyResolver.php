@@ -43,6 +43,18 @@ final class OntologyResolver
 
     private function detectAction(string $text): ?string
     {
+        if (preg_match('/\b(agenda|agendar|programa|programar)\b.*\b(cita|reunion)\b/u', $text) === 1) {
+            return 'agendar_reunion';
+        }
+
+        if (preg_match('/\b(agenda|agendar|programa|programar)\b.*\b(llamada|llamar)\b/u', $text) === 1) {
+            return 'agendar_llamada';
+        }
+
+        if (preg_match('/\b(necesito|quiero|debo|puedo)\b.*\b(agendar|programar)\b/u', $text) === 1 || preg_match('/\b(agendar|programar)\b/u', $text) === 1) {
+            return 'crear_recordatorio';
+        }
+
         if (preg_match('/\b(envia|enviar|manda|mandar)\s+whatsapp\b/u', $text) === 1) {
             return 'programar_whatsapp';
         }
@@ -375,9 +387,14 @@ final class OntologyResolver
 
     private function extractAgendaItem(string $text, string $originalText, string $tipo): array
     {
+        $title = $tipo === 'call' ? 'Llamar' : 'Reunion';
+        if ($tipo === 'meeting' && preg_match('/\bcita\b/u', $text) === 1) {
+            $title = 'Cita';
+        }
+
         $fields = [
             'tipo' => $tipo,
-            'titulo' => $tipo === 'call' ? 'Llamar' : 'Reunion',
+            'titulo' => $title,
             'descripcion' => $originalText,
             'fecha_texto' => $originalText,
         ];

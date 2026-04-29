@@ -15,7 +15,7 @@ final class AgentResponseComposer
             'consulta_finanzas' => 'Puedes revisar el resumen financiero en el modulo Finanzas. Pronto podre entregarte el detalle por aqui.',
             'consulta_crm' => 'Puedes revisar la informacion de personas y familias en el modulo CRM. Pronto podre ayudarte a consultarla desde aqui.',
             'oracion' => 'Puedes registrar y revisar solicitudes de oracion en el modulo Pastoral. Pronto podre ayudarte a gestionarlas por aqui.',
-            default => 'Puedo ayudarte con: personas, familias, finanzas, discipulado o pastoral.',
+            default => 'Puedo ayudarte con: personas, familias, finanzas, agenda, discipulado o pastoral.',
         };
     }
 
@@ -26,7 +26,7 @@ final class AgentResponseComposer
         $output = is_array($toolExecution['output'] ?? null) ? $toolExecution['output'] : [];
 
         if ($status === 'unresolved') {
-            return 'Puedo ayudarte con: personas, familias, finanzas, discipulado o pastoral.';
+            return 'Puedo ayudarte con: personas, familias, finanzas, agenda, discipulado o pastoral.';
         }
 
         if ($status === 'unhandled') {
