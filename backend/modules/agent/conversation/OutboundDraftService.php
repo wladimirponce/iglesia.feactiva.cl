@@ -25,27 +25,33 @@ final class OutboundDraftService
     public function improve(int $id): string
     {
         $draft = $this->repository->find($id);
+        $tenantId = isset($draft['tenant_id']) ? (int) $draft['tenant_id'] : null;
+        $userId   = isset($draft['created_by_user_id']) ? (int) $draft['created_by_user_id'] : null;
         $text = trim((string) (($draft['improved_text'] ?? null) ?: ($draft['draft_text'] ?? '')));
         $improved = $this->improveText($text);
         $this->repository->improve($id, $improved);
-        $this->audit('outbound_draft.improved', $draft['tenant_id'] ?? null, $draft['created_by_user_id'] ?? null, $id);
+        $this->audit('outbound_draft.improved', $tenantId, $userId, $id);
         return $improved;
     }
 
     public function approveAndMarkSent(int $id): void
     {
-        $draft = $this->repository->find($id);
+        $draft    = $this->repository->find($id);
+        $tenantId = isset($draft['tenant_id']) ? (int) $draft['tenant_id'] : null;
+        $userId   = isset($draft['created_by_user_id']) ? (int) $draft['created_by_user_id'] : null;
         $this->repository->setStatus($id, 'approved');
-        $this->audit('outbound_draft.approved', $draft['tenant_id'] ?? null, $draft['created_by_user_id'] ?? null, $id);
+        $this->audit('outbound_draft.approved', $tenantId, $userId, $id);
         $this->repository->setStatus($id, 'sent');
-        $this->audit('outbound_draft.sent', $draft['tenant_id'] ?? null, $draft['created_by_user_id'] ?? null, $id, ['simulated' => true]);
+        $this->audit('outbound_draft.sent', $tenantId, $userId, $id, ['simulated' => true]);
     }
 
     public function cancel(int $id): void
     {
-        $draft = $this->repository->find($id);
+        $draft    = $this->repository->find($id);
+        $tenantId = isset($draft['tenant_id']) ? (int) $draft['tenant_id'] : null;
+        $userId   = isset($draft['created_by_user_id']) ? (int) $draft['created_by_user_id'] : null;
         $this->repository->setStatus($id, 'cancelled');
-        $this->audit('outbound_draft.cancelled', $draft['tenant_id'] ?? null, $draft['created_by_user_id'] ?? null, $id);
+        $this->audit('outbound_draft.cancelled', $tenantId, $userId, $id);
     }
 
     private function improveText(string $text): string
