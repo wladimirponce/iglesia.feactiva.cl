@@ -252,6 +252,7 @@ function handleInternalWhatsAppMessage(): void
             'fallback_used' => $transcription['fallback_used'] ?? false,
             'fallback_reason' => $transcription['fallback_reason'] ?? null,
             'error' => $transcription['error'] ?? null,
+            'text' => $transcriptionText,
             'transcription_length' => strlen($transcriptionText),
         ];
         internalWhatsappAudit($tenantId, $userId, null, 'whatsapp.audio.transcribed', $transcriptionStatus === 'completed' ? 'success' : 'failed', [
